@@ -32,13 +32,13 @@
     <worldbody>
         <geom name="groundplane" pos="0 0 0" size="140 140 0.1" type="plane" material="MatPlane" friction="0.8 0.2 0.002" condim="3" solref="0.002 1" solimp="0.9 0.95 0.05" />
         <body name="base_link" pos="0.0 0.0 0.2607">
-            <inertial pos="-0.00589457 0.00113829 -0.05282656" mass="2.681608094892505" diaginertia="0.01981432 0.00625385 0.01642957" />
+            <inertial pos="-0.00589457 0.00113829 -0.05282656" mass="2.4993284429226086" diaginertia="0.01981432 0.00625385 0.01642957" />
             <geom type="mesh" mesh="base_link" rgba="0.2 0.2 0.2 1" class="visual" />
             <geom type="box" size="0.09 0.12 0.08" pos="-0.04 0 -0.08" rgba="0.8 0.2 0.2 0.3" class="collision" />
             <joint name="base_free_joint" type="free" damping="0.0" />
             <site name="imu" size="0.01" pos="0.021 0.00025 -0.042" />
             <body name="left_shoulder_link" pos="-0.004 0.136 -0.08" quat="-2.59734e-06 -2.59735e-06 -0.707108 -0.707105">
-            <inertial pos="0.0231929 0.00232951 0.00696198" quat="-0.0335555 0.702863 0.0331623 0.709759" mass="0.15417845137327513" diaginertia="0.000398226 0.000381372 1.97217e-05" />
+            <inertial pos="0.0231929 0.00232951 0.00696198" quat="-0.0335555 0.702863 0.0331623 0.709759" mass="0.15182388807153072" diaginertia="0.000398226 0.000381372 1.97217e-05" />
             <joint name="left_shoulder_joint" pos="0 0 0" axis="0 0 1" range="-1.2754 0" class="joints" />
             <geom type="mesh" rgba="0.1 0.1 0.1 1" mesh="left_shoulder_link" />
             <body name="left_leg_link" pos="0.15929 0.015078 0.00045">
@@ -46,7 +46,7 @@
                 <joint name="left_leg_joint" pos="0 0 0" axis="0 0 1" range="0 2.61799" class="joints" />
                 <geom type="mesh" rgba="0.1 0.1 0.1 1" mesh="left_leg_link" />
                 <body name="left_wheel_link" pos="-0.13 -0.093274 0.0315">
-                <inertial pos="0.00004532 0.00006323 0.01284742" quat="0.5 0.5 -0.5 0.5" mass="0.5520413527107123" diaginertia="0.00138510 0.00138510 0.00267419" />
+                <inertial pos="0.00004532 0.00006323 0.01284742" quat="0.5 0.5 -0.5 0.5" mass="0.5376541329964812" diaginertia="0.00138510 0.00138510 0.00267419" />
                 <joint name="left_wheel_joint" pos="0 0 0" axis="0 0 1" type="hinge" limited="false" class="wheels" />
                 <geom type="mesh" rgba="0.15 0.15 0.15 1" mesh="left_wheel_link" class="visual" />
                 <geom type="cylinder" size="0.1025 0.0175" pos="0 0 0.02" rgba="0.8 0.2 0.2 0.3" class="collision" />
@@ -54,7 +54,7 @@
             </body>
             </body>
             <body name="right_shoulder_link" pos="-0.004 -0.136 -0.08" quat="0.707105 0.707108 0 0">
-            <inertial pos="-0.023218 0.00206382 0.00696198" quat="0.0331623 0.709759 -0.0335555 0.702863" mass="0.14505240369817798" diaginertia="0.000398226 0.000381372 1.97217e-05" />
+            <inertial pos="-0.023218 0.00206382 0.00696198" quat="0.0331623 0.709759 -0.0335555 0.702863" mass="0.14621306408810425" diaginertia="0.000398226 0.000381372 1.97217e-05" />
             <joint name="right_shoulder_joint" pos="0 0 0" axis="0 0 -1" range="-1.2754 0" class="joints" />
             <geom type="mesh" rgba="0.1 0.1 0.1 1" mesh="right_shoulder_link" />
             <body name="right_leg_link" pos="-0.15929 0.015078 0.00045">
@@ -62,7 +62,7 @@
                 <joint name="right_leg_joint" pos="0 0 0" axis="0 0 -1" range="0 2.61799" class="joints" />
                 <geom type="mesh" rgba="0.1 0.1 0.1 1" mesh="right_leg_link" />
                 <body name="right_wheel_link" pos="0.13 -0.093274 0.0315">
-                <inertial pos="0.00007441 -0.00002268 0.01284742" quat="0.5 0.5 -0.5 0.5" mass="0.5722492721450863" diaginertia="0.00138510 0.00138510 0.00267419" />
+                <inertial pos="0.00007441 -0.00002268 0.01284742" quat="0.5 0.5 -0.5 0.5" mass="0.5458396480184535" diaginertia="0.00138510 0.00138510 0.00267419" />
                 <joint name="right_wheel_joint" pos="0 0 0" axis="0 0 -1" type="hinge" limited="false" class="wheels" />
                 <geom type="mesh" rgba="0.15 0.15 0.15 1" mesh="right_wheel_link" class="visual" />
                 <geom type="cylinder" size="0.1025 0.0175" pos="0 0 0.02" rgba="0.8 0.2 0.2 0.3" class="collision" />

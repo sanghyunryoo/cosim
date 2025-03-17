@@ -1,3 +1,12 @@
+# Ignore any .onnx files
+*.onnx
+
+# Ignore any .pdf files
+*.pdf
+
+# Ignore any .xml files containing "applied" in the filename
+*applied*.xml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
