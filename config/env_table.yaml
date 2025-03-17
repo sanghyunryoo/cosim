@@ -38,9 +38,9 @@
   "wheel_max_torque": "45"
 
 "flamingo_edu_v1":
-  "Kp_shoulder": "30"
+  "Kp_shoulder": "50"
   "Kp_wheel": "0"
-  "Kd_shoulder": "1.25"
+  "Kd_shoulder": "1.5"
   "Kd_wheel": "0.2"
   "command_3_initial": "0.0"
   "joint_max_torque": "12"

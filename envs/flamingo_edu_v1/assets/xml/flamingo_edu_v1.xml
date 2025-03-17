@@ -22,15 +22,15 @@
         </default>
 
         <default class='joints'>
-            <joint damping="0.5" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-12 12"/>
+            <joint damping="0.5" stiffness="0.0" frictionloss="0.01" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-12 12"/>
         </default>
         <default class='wheels'>
-            <joint damping="0.0" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-12 12"/>
+            <joint damping="0.0" stiffness="0.0" frictionloss="0.01" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-12 12"/>
         </default>
     </default>
 
     <worldbody>
-        <geom name="groundplane" pos="0 0 0" size="140 140 0.1" type="plane" material="MatPlane" friction="0.8 0.8 0.002" condim="3" solref="0.002 1" solimp="0.9 0.95 0.05"/>
+        <geom name="groundplane" pos="0 0 0" size="140 140 0.1" type="plane" material="MatPlane" friction="0.8 0.2 0.002" condim="3" solref="0.002 1" solimp="0.9 0.95 0.05"/>
         <body name="base_link" pos="0.0 0.0 0.2607">
             <inertial pos="-0.00589457 0.00113829 -0.05282656" mass="2.568" diaginertia="0.01981432 0.00625385 0.01642957" />
             <geom type="mesh" mesh="base_link" rgba="0.2 0.2 0.2 1" class="visual"/>
@@ -110,6 +110,14 @@
 
         <mesh name="left_upper_link" file="../mesh/left_upper_link.STL"/>
         <mesh name="right_upper_link" file="../mesh/right_upper_link.STL"/>
+
+        <hfield name="flat" file="../terrain/flat.png" nrow="64" ncol="64" size="140 140 10 0.1"/>
+        <hfield name="rocky_easy" file="../terrain/rocky_easy.png" nrow="512" ncol="512" size="140 140 0.1 0.1"/>
+        <hfield name="rocky_hard" file="../terrain/rocky_hard.png" nrow="512" ncol="512" size="140 140 0.25 0.1"/>
+        <hfield name="slope_easy" file="../terrain/slope_easy.png" nrow="512" ncol="512" size="140 140 0.5 0.1"/>
+        <hfield name="slope_hard" file="../terrain/slope_hard.png" nrow="512" ncol="512" size="140 140 1 0.1"/>
+        <hfield name="stairs_easy" file="../terrain/stairs_easy.png" nrow="128" ncol="8192" size="140 140 0.32 0.1"/>
+        <hfield name="stairs_hard" file="../terrain/stairs_hard.png" nrow="128" ncol="8192" size="140 140 0.64 0.1"/>
     </asset>
 
 	<equality>
