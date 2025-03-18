@@ -3,11 +3,11 @@ from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.spaces import Box
 import numpy as np
 import mujoco
-from envs.flamingo_v1_4.manager.control_manager import ControlManager
-from envs.flamingo_v1_4.manager.xml_manager import XMLManager
-from envs.flamingo_v1_4.utils.math_utils import MathUtils
-from envs.flamingo_v1_4.utils.mujoco_utils import MuJoCoUtils
-from envs.flamingo_v1_4.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
+from envs.flamingo_v1_4_1.manager.control_manager import ControlManager
+from envs.flamingo_v1_4_1.manager.xml_manager import XMLManager
+from envs.flamingo_v1_4_1.utils.math_utils import MathUtils
+from envs.flamingo_v1_4_1.utils.mujoco_utils import MuJoCoUtils
+from envs.flamingo_v1_4_1.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
 import glfw
 
 
@@ -17,8 +17,8 @@ class FlamingoV1_4_1(MujocoEnv, utils.EzPickle):
         # Set Basic Properties
         self.id = "flamingo_v1_4_1"
         self.config = config
-        self.state_dim = 20
-        self.action_dim = 8
+        self.state_dim = config["env"]["observation_dim"]
+        self.action_dim = config["env"]["action_dim"]
         self.command_dim = config["env"]["command_dim"]
         self.render_mode = render_mode
         self.render_flag = render_flag

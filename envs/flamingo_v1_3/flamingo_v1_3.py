@@ -17,8 +17,8 @@ class FlamingoV1_3(MujocoEnv, utils.EzPickle):
         # Set Basic Properties
         self.id = "flamingo_v1_3"
         self.config = config
-        self.state_dim = 20
-        self.action_dim = 8
+        self.state_dim = config["env"]["observation_dim"]
+        self.action_dim = config["env"]["action_dim"]
         self.command_dim = config["env"]["command_dim"]
         self.render_mode = render_mode
         self.render_flag = render_flag
