@@ -17,8 +17,8 @@ class FlamingoEduV1(MujocoEnv, utils.EzPickle):
         # Set Basic Properties
         self.id = "flamingo_edu_v1"
         self.config = config
-        self.state_dim = 12
-        self.action_dim = 4
+        self.state_dim = config["env"]["observation_dim"]
+        self.action_dim = config["env"]["action_dim"]
         self.command_dim = config["env"]["command_dim"]
         self.render_mode = render_mode
         self.render_flag = render_flag
@@ -201,7 +201,7 @@ class FlamingoEduV1(MujocoEnv, utils.EzPickle):
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)
-        qpos[2] = 0.216  # Initial height: 0.2157
+        qpos[2] = 0.2607  # Initial height: 0.2607
         qpos[3:7] = np.array([1, 0, 0, 0])  # Initial orientation
         qpos_joint_names = ["left_shoulder_joint", "right_shoulder_joint", "left_wheel_joint", "right_wheel_joint"]
         q_indices = self.mujoco_utils.get_qpos_joint_indices_by_name(qpos_joint_names)
