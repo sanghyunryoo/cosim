@@ -30,7 +30,7 @@
     </default>
 
     <worldbody>
-        <geom name="groundplane" pos="0 0 0" size="140 140 0.1" type="plane" material="MatPlane" friction="0.8 0.2 0.002" condim="3" solref="0.002 1" solimp="0.9 0.95 0.05"/>
+        <geom name="ground" pos="0 0 0" type="hfield" hfield="flat" material="MatPlane" friction="0.8 0.02 0.01" condim="3"/>
         <body name="base_link" pos="0.0 0.0 0.2607">
             <inertial pos="-0.00589457 0.00113829 -0.05282656" mass="2.568" diaginertia="0.01981432 0.00625385 0.01642957" />
             <geom type="mesh" mesh="base_link" rgba="0.2 0.2 0.2 1" class="visual"/>
@@ -49,7 +49,7 @@
                 <inertial pos="0.00004532 0.00006323 0.01284742" quat="0.5 0.5 -0.5 0.5" mass="0.545" diaginertia="0.00138510 0.00138510 0.00267419"/>
                 <joint name="left_wheel_joint" pos="0 0 0" axis="0 0 1" type="hinge" limited="false" class="wheels"/>
                 <geom type="mesh" rgba="0.15 0.15 0.15 1" mesh="left_wheel_link" class="visual"/>
-                <geom type="cylinder" size="0.1025 0.0175" pos="0 0 0.02" rgba="0.8 0.2 0.2 0.3" class="collision"/>
+                <geom type="cylinder" size="0.1025 0.0175" pos="0 0 0.02" friction="0.8 0.02 0.01" rgba="0.8 0.2 0.2 0.3" class="collision"/>
                 </body>
             </body>
             </body>
@@ -65,7 +65,7 @@
                 <inertial pos="0.00007441 -0.00002268 0.01284742" quat="0.5 0.5 -0.5 0.5" mass="0.545" diaginertia="0.00138510 0.00138510 0.00267419"/>
                 <joint name="right_wheel_joint" pos="0 0 0" axis="0 0 -1" type="hinge" limited="false" class="wheels"/>
                 <geom type="mesh" rgba="0.15 0.15 0.15 1" mesh="right_wheel_link" class="visual"/>
-                <geom type="cylinder" size="0.1025 0.0175" pos="0 0 0.02" rgba="0.8 0.2 0.2 0.3" class="collision"/>
+                <geom type="cylinder" size="0.1025 0.0175" pos="0 0 0.02" friction="0.8 0.02 0.01" rgba="0.8 0.2 0.2 0.3" class="collision"/>
                 </body>
             </body>
             </body>
