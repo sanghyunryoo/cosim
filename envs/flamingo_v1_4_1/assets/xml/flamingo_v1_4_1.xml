@@ -33,7 +33,7 @@
 
     <worldbody>
 
-    <geom name="groundplane" pos="0 0 0" size="140 140 0.1" type="plane" material="MatPlane" condim="3" friction="0.8 0.2 0.02" solref="0.002 1" solimp="0.9 0.95 0.05"/>
+    <geom name="ground" pos="0 0 0" type="hfield" hfield="flat" material="MatPlane" friction="0.8 0.02 0.01" condim="3"/>
         <body name="base_link" pos="0.0 0.0 0.36288">
             <inertial pos="0.00005133 -0.00467754 0.00434373" mass="0.02174000" diaginertia="0.00000458 0.00000410 0.00000586" />
             <geom size="0.04125 0.15 0.145" pos="0.02375 0 0.088" type="box" rgba="0.8 0.2 0.2 0.3" class="collision"/>
@@ -60,7 +60,7 @@
                             <inertial pos="-2.533e-05 -4.884e-05 0.0369311" quat="0.5 0.5 -0.5 0.5" mass="0.937675" diaginertia="0.00554999 0.00307063 0.00307063"/>
                             <geom type="mesh" mesh="left_wheel_link" rgba="0.2 0.2 0.2 1" class="visual"/>
                             <joint name="left_wheel_joint" pos="0 0 0" axis="0 0 1" type="hinge" limited="false" class="wheels"/>
-                            <geom size="0.118 0.01875" pos="0 0 0.06025" type="cylinder" rgba="0.8 0.2 0.2 0.3" class="collision"/>
+                            <geom size="0.118 0.01875" pos="0 0 0.06025" friction="0.8 0.02 0.01" type="cylinder" rgba="0.8 0.2 0.2 0.3" class="collision"/>
                         </body>
                     </body>
                 </body>
@@ -84,7 +84,7 @@
                             <inertial pos="-3.75e-05 -4.025e-05 0.0369311" quat="0.5 0.5 -0.5 0.5" mass="0.937675" diaginertia="0.00554999 0.00307063 0.00307063"/>
                             <geom type="mesh" mesh="right_wheel_link" rgba="0.2 0.2 0.2 1" class="visual"/>
                             <joint name="right_wheel_joint" pos="0 0 0" axis="0 0 -1" type="hinge" limited="false" class="wheels"/>
-                            <geom size="0.118 0.01875" pos="0 0 0.06025" type="cylinder" rgba="0.8 0.2 0.2 0.3" class="collision"/>
+                            <geom size="0.118 0.01875" pos="0 0 0.06025" friction="0.8 0.02 0.01" type="cylinder" rgba="0.8 0.2 0.2 0.3" class="collision"/>
                         </body>
                     </body>
                 </body>
@@ -144,7 +144,7 @@
         <mesh name="left_leg_link" file="../mesh/left_leg_link.STL"/>
         <mesh name="left_wheel_link" file="../mesh/left_wheel_link.STL"/>
         <mesh name="right_hip_link" file="../mesh/right_hip_link.STL"/>
-        <mesh name="right_shoulder_link" file=".../mesh/right_shoulder_link.STL"/>
+        <mesh name="right_shoulder_link" file="../mesh/right_shoulder_link.STL"/>
         <mesh name="right_leg_link" file="../mesh/right_leg_link.STL"/>
         <mesh name="right_wheel_link" file="../mesh/right_wheel_link.STL"/>
         <mesh name="sbc_pdb_link" file="../mesh/sbc_pdb_link.STL"/>

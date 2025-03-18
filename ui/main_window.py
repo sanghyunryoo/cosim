@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.0")
+        self.setWindowTitle("cosim  -  v1.1.0")
         self.resize(950, 1000)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
@@ -97,20 +97,43 @@ class MainWindow(QMainWindow):
 
     def update_defaults(self, new_env_id):
         settings = self.env_config.get(new_env_id)
+        h_settings = settings["hardware"]
         # Update hardware settings
-        self.Kp_hip.setText(settings["Kp_hip"])
-        self.Kp_shoulder.setText(settings["Kp_shoulder"])
-        self.Kp_leg.setText(settings["Kp_leg"])
-        self.Kp_wheel.setText(settings["Kp_wheel"])
-        self.Kd_hip.setText(settings["Kd_hip"])
-        self.Kd_shoulder.setText(settings["Kd_shoulder"])
-        self.Kd_leg.setText(settings["Kd_leg"])
-        self.Kd_wheel.setText(settings["Kd_wheel"])
-        self.joint_max_torque_le.setText(settings["joint_max_torque"])
-        self.wheel_max_torque_le.setText(settings["wheel_max_torque"])
+        self.Kp_hip.setText(h_settings["Kp_hip"]) if h_settings.get("Kp_hip") else self.Kp_hip.setText("N/A")
+        self.Kp_leg.setText(h_settings["Kp_leg"]) if h_settings.get("Kp_leg") else self.Kp_leg.setText("N/A")
+        self.Kp_shoulder.setText(h_settings["Kp_shoulder"]) if h_settings.get("Kp_shoulder") else self.Kp_shoulder.setText("N/A")
+        self.Kd_hip.setText(h_settings["Kd_hip"]) if h_settings.get("Kd_hip") else self.Kd_hip.setText("N/A")
+        self.Kd_leg.setText(h_settings["Kd_leg"]) if h_settings.get("Kd_leg") else self.Kd_leg.setText("N/A")
+        self.Kd_shoulder.setText(h_settings["Kd_shoulder"]) if h_settings.get("Kd_shoulder") else self.Kd_shoulder.setText("N/A")
+        
+        self.Kp_wheel.setText(h_settings["Kp_wheel"]) if h_settings.get("Kp_wheel") else self.Kp_wheel.setText("N/A")
+        self.Kd_wheel.setText(h_settings["Kd_wheel"]) if h_settings.get("Kd_wheel") else self.Kd_wheel.setText("N/A")
+        self.joint_max_torque_le.setText(h_settings["joint_max_torque"])
+        self.wheel_max_torque_le.setText(h_settings["wheel_max_torque"])
+
+        # Optional Settings: If users set the env values, it automatically update the 'le' values.
+        env_settings = settings.get("env")
+        if isinstance(env_settings, dict):
+            observation_dim = env_settings["observation_dim"]
+            action_dim = env_settings["action_dim"]
+            command_dim = env_settings["command_dim"]
+            command_0_max = "1.5"  # lin_vel
+            command_1_max = "1.5"  # ang_vel
+
+            if command_dim is not None:
+                self.command_dim_le.setText(str(command_dim))
+            if action_dim is not None:
+                self.action_dim_le.setText(str(action_dim))
+            if observation_dim is not None:
+                self.observation_dim_le.setText(str(observation_dim))
+            if command_0_max is not None:
+                self.max_command_value_le_list[0].setText(str(command_0_max))
+            if command_1_max is not None:
+                self.max_command_value_le_list[2].setText(str(command_1_max))
+
         # command[3]의 초기값은 환경에 따라 갱신
         if isinstance(self.command_initial_value_le_list[3], QLineEdit):
-            self.command_initial_value_le_list[3].setText(settings["command_3_initial"])
+            self.command_initial_value_le_list[3].setText(env_settings["command_3_initial"])
 
     def showEvent(self, event):
         self.centralWidget().setFocus()
@@ -537,7 +560,7 @@ class MainWindow(QMainWindow):
             label = QLabel(f"command[{i}]")
             sensitivity_le = QLineEdit("0.02")
             max_value_le = QLineEdit("1.5" if i in [0, 1, 2] else "1")
-            init_value_widget = QLineEdit(settings["command_3_initial"]) if i == 3 else QLabel("0.0")
+            init_value_widget = QLineEdit(settings["env"]["command_3_initial"]) if i == 3 else QLabel("0.0")
 
             grid_layout.addWidget(label, i + 1, 0)
             grid_layout.addWidget(sensitivity_le, i + 1, 1)
@@ -747,14 +770,14 @@ class MainWindow(QMainWindow):
                     "load": self.load_slider.value() / 10.0
                 },
                 "hardware": {
-                    "Kp_hip": float(self.Kp_hip.text().strip()),
-                    "Kp_shoulder": float(self.Kp_shoulder.text().strip()),
-                    "Kp_leg": float(self.Kp_leg.text().strip()),
-                    "Kd_hip": float(self.Kd_hip.text().strip()),
-                    "Kd_shoulder": float(self.Kd_shoulder.text().strip()),
-                    "Kd_leg": float(self.Kd_leg.text().strip()),
-                    "Kp_wheel": float(self.Kp_wheel.text().strip()),
-                    "Kd_wheel": float(self.Kd_wheel.text().strip()),
+                    "Kp_hip": float(self.Kp_hip.text().strip()) if self.Kp_hip.text().strip() != "N/A" else "N/A",
+                    "Kp_shoulder": float(self.Kp_shoulder.text().strip()) if self.Kp_shoulder.text().strip() != "N/A" else "N/A",
+                    "Kp_leg": float(self.Kp_leg.text().strip()) if self.Kp_leg.text().strip() != "N/A" else "N/A",
+                    "Kd_hip": float(self.Kd_hip.text().strip()) if self.Kd_hip.text().strip() != "N/A" else "N/A",
+                    "Kd_shoulder": float(self.Kd_shoulder.text().strip()) if self.Kd_shoulder.text().strip() != "N/A" else "N/A",
+                    "Kd_leg": float(self.Kd_leg.text().strip()) if self.Kd_leg.text().strip() != "N/A" else "N/A",
+                    "Kp_wheel": float(self.Kp_wheel.text().strip()) if self.Kp_wheel.text().strip() != "N/A" else "N/A",
+                    "Kd_wheel": float(self.Kd_wheel.text().strip()) if self.Kd_wheel.text().strip() != "N/A" else "N/A",
                     "joint_max_torque": float(self.joint_max_torque_le.text().strip()),
                     "wheel_max_torque": float(self.wheel_max_torque_le.text().strip())
                 }

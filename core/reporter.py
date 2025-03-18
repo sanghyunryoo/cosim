@@ -97,23 +97,6 @@ class Reporter:
         dt = float(self.history.get('dt', [1])[0])
         times = np.arange(self.timesteps) * dt
 
-        def add_small_logo(fig):
-            logo_path_small = os.path.normpath(
-                os.path.join(os.path.dirname(__file__), "..", "ui", "icon", 'cocelo_logo_small.png'))
-            try:
-                logo_small = plt.imread(logo_path_small)
-                dpi = fig.get_dpi()
-                fig_width_px = fig.get_figwidth() * dpi
-                fig_height_px = fig.get_figheight() * dpi
-                logo_width = logo_small.shape[1]
-                logo_height = logo_small.shape[0]
-                margin = 50
-                xo = int(fig_width_px - logo_width - margin)
-                yo = int(fig_height_px - logo_height - margin)
-                fig.figimage(logo_small, xo=xo, yo=yo, alpha=0.8, zorder=10)
-            except FileNotFoundError:
-                print(f"Warning: Small logo file not found at {logo_path_small}")
-
         with PdfPages(self.report_path) as pdf:
             # ===============================
             # 커버 페이지
@@ -185,7 +168,6 @@ class Reporter:
                 n_rows = math.ceil(n_dims / n_cols)
                 fig, axes = plt.subplots(n_rows, n_cols, figsize=PAGE_SIZE)
                 fig.suptitle("Set Points vs. Actual State", fontsize=16, fontweight='bold')
-                add_small_logo(fig)
 
                 if n_rows * n_cols == 1:
                     axes = np.array([axes])
@@ -239,7 +221,6 @@ class Reporter:
                     n_rows = math.ceil(n_plots / 2)
                 fig, axes = plt.subplots(n_rows, n_cols, figsize=PAGE_SIZE)
                 fig.suptitle("Command vs. Actual Values", fontsize=16, fontweight='bold')
-                add_small_logo(fig)
 
                 if n_rows * n_cols == 1:
                     axes = np.array([axes])
@@ -277,7 +258,6 @@ class Reporter:
             if ('torque' in self.history and 'action_diff_RMS' in self.history):
                 fig, axes = plt.subplots(2, 1, figsize=PAGE_SIZE)
                 fig.suptitle("Action Difference (Oscillation) and Torques", fontsize=16, fontweight='bold')
-                add_small_logo(fig)
 
                 diffs = np.array(self.history['action_diff_RMS'], dtype=float)
                 # 액션 차이 그래프 색상 (노랑계열 제외)
@@ -327,7 +307,6 @@ class Reporter:
                 ax.axis('tight')
                 ax.axis('off')
                 fig_config.suptitle("Configuration", fontsize=20, fontweight='bold', y=0.98)
-                add_small_logo(fig_config)
 
                 table = ax.table(cellText=page_data,
                                  colLabels=["Parameter", "Value"],
