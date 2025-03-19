@@ -1,3 +1,6 @@
+# Ignore any .TXT files (mujoco error log)
+*.TXT
+
 # Ignore any .onnx files
 *.onnx
 
