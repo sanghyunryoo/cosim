@@ -199,7 +199,7 @@ class FlamingoV1_4_1(MujocoEnv, utils.EzPickle):
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)
-        qpos[2] = 0.40189
+        qpos[2] = 0.36288
         qpos[3:7] = np.array([1, 0, 0, 0])
         qpos[7:15] = np.array([0, 0.0, -0.0, 0, 0, 0.0, -0.0, 0])
         qpos[7:15] = uniform_noisy_data(qpos[7:15], lower=-self.init_noise, upper=self.init_noise)
