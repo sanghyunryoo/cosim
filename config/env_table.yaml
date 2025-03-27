@@ -40,7 +40,7 @@
     "observation_dim": "20"
     "action_dim": "8"
     "command_dim": "4"
-    "command_3_initial": "0.0"
+    "command_3_initial": "0.363"
   "hardware":
     "Kp_hip": "100"
     "Kp_shoulder": "100"
@@ -58,7 +58,7 @@
     "observation_dim": "20"
     "action_dim": "8"
     "command_dim": "4"
-    "command_3_initial": "0.0"
+    "command_3_initial": "0.363"
   "hardware":
     "Kp_hip": "100"
     "Kp_shoulder": "100"
@@ -76,7 +76,7 @@
     "observation_dim": "12"
     "action_dim": "4"
     "command_dim": "4"
-    "command_3_initial": "0.0"
+    "command_3_initial": "0.2607"
   "hardware":
     "Kp_shoulder": "50"
     "Kp_wheel": "0"
