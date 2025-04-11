@@ -86,7 +86,7 @@ class FlamingoV1_4_2(MujocoEnv, utils.EzPickle):
             quat = np.array([0, 0, 0, 1])
 
         omega = self.data.sensor('angular-velocity').data.astype(np.double)
-        euler = MathUtils.quaternion_to_euler_array(quat)
+        projected_gravity = MathUtils.quat_to_base_vel(quat, np.array([0, 0, -1], dtype=np.double))
 
         q = truncated_gaussian_noisy_data(q, mean=self.sensor_noise_map["q"]["mean"], std=self.sensor_noise_map["q"]["std"],
                                           lower=self.sensor_noise_map["q"]["lower"], upper=self.sensor_noise_map["q"]["upper"])
@@ -94,10 +94,11 @@ class FlamingoV1_4_2(MujocoEnv, utils.EzPickle):
                                           lower=self.sensor_noise_map["qd"]["lower"], upper=self.sensor_noise_map["qd"]["upper"])
         omega = truncated_gaussian_noisy_data(omega, mean=self.sensor_noise_map["omega"]["mean"], std=self.sensor_noise_map["omega"]["std"],
                                           lower=self.sensor_noise_map["omega"]["lower"], upper=self.sensor_noise_map["omega"]["upper"])
-        euler = truncated_gaussian_noisy_data(euler, mean=self.sensor_noise_map["euler"]["mean"], std=self.sensor_noise_map["euler"]["std"],
-                                          lower=self.sensor_noise_map["euler"]["lower"], upper=self.sensor_noise_map["euler"]["upper"])
-        obs = np.concatenate([q, qd, omega, euler])
+        projected_gravity = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"],
+                                          lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
+        obs = np.concatenate([q, qd, omega, projected_gravity])
         return obs
+
 
     def step(self, action):
         self.action = action
