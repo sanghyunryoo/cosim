@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.1.1")
+        self.setWindowTitle("cosim  -  v1.2.0")
         self.resize(950, 1000)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
@@ -293,7 +293,7 @@ class MainWindow(QMainWindow):
 
         self.env_id_cb = NoWheelComboBox()
         self.env_id_cb.addItems(self.env_config.keys())
-        self.env_id_cb.setCurrentText("flamingo_v1_4_2")
+        self.env_id_cb.setCurrentText("flamingo_v1_5_1")
         env_layout.addRow("ID:", self.env_id_cb)
 
         self.terrain_id_cb = NoWheelComboBox()

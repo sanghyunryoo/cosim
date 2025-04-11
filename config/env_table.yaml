@@ -1,82 +1,9 @@
-"flamingo_v1_3":
-  "env":
-    "observation_dim": "20"
-    "action_dim": "8"
-    "command_dim": "6"
-    "command_3_initial": "0.402"
-  "hardware":
-    "Kp_hip": "75"
-    "Kp_shoulder": "75"
-    "Kp_leg": "75"
-    "Kp_wheel": "0"
-    "Kd_hip": "0.65"
-    "Kd_shoulder": "0.65"
-    "Kd_leg": "0.65"
-    "Kd_wheel": "0.35"
-    "joint_max_torque": "23"
-    "wheel_max_torque": "23"
-
-"flamingo_v1_4":
-  "env":
-    "observation_dim": "20"
-    "action_dim": "8"
-    "command_dim": "6"
-    "command_3_initial": "0.363"
-  "hardware":
-    "Kp_hip": "120"
-    "Kp_shoulder": "120"
-    "Kp_leg": "120"
-    "Kp_wheel": "0"
-    "Kd_hip": "2"
-    "Kd_shoulder": "2"
-    "Kd_leg": "2"
-    "Kd_wheel": "0.5"
-    "command_3_initial": "0.363"
-    "joint_max_torque": "45"
-    "wheel_max_torque": "45"
-
-"flamingo_v1_4_1":
-  "env":
-    "observation_dim": "20"
-    "action_dim": "8"
-    "command_dim": "4"
-    "command_3_initial": "0.363"
-  "hardware":
-    "Kp_hip": "100"
-    "Kp_shoulder": "100"
-    "Kp_leg": "150"
-    "Kp_wheel": "0"
-    "Kd_hip": "1.5"
-    "Kd_shoulder": "1.5"
-    "Kd_leg": "2"
-    "Kd_wheel": "0.6"
-    "joint_max_torque": "45"
-    "wheel_max_torque": "45"
-
-"flamingo_v1_4_2":
-  "env":
-    "observation_dim": "20"
-    "action_dim": "8"
-    "command_dim": "4"
-    "command_3_initial": "0.363"
-  "hardware":
-    "Kp_hip": "100"
-    "Kp_shoulder": "100"
-    "Kp_leg": "150"
-    "Kp_wheel": "0"
-    "Kd_hip": "1.5"
-    "Kd_shoulder": "1.5"
-    "Kd_leg": "2"
-    "Kd_wheel": "0.5"
-    "joint_max_torque": "45"
-    "wheel_max_torque": "45"
-
-"flamingo_edu_v1":
+"flamingo_light_proto_v1":
   "env":
     "observation_dim": "12"
     "action_dim": "4"
     "command_dim": "4"
-    "command_3_initial": "0.2607"
+    "command_3_initial": "0.261"
   "hardware":
     "Kp_shoulder": "50"
     "Kp_wheel": "0"
@@ -85,3 +12,21 @@
     "joint_max_torque": "12"
     "wheel_max_torque": "12"
     
+
+"flamingo_v1_5_1":
+  "env":
+    "observation_dim": "20"
+    "action_dim": "8"
+    "command_dim": "4"
+    "command_3_initial": "0.363"
+  "hardware":
+    "Kp_hip": "100"
+    "Kp_shoulder": "100"
+    "Kp_leg": "150"
+    "Kp_wheel": "0"
+    "Kd_hip": "1.5"
+    "Kd_shoulder": "1.5"
+    "Kd_leg": "2"
+    "Kd_wheel": "0.5"
+    "joint_max_torque": "45"
+    "wheel_max_torque": "45"
