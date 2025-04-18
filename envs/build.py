@@ -1,12 +1,9 @@
-from envs.flamingo_v1_4_2.flamingo_v1_4_2 import FlamingoV1_4_2
 from envs.flamingo_v1_5_1.flamingo_v1_5_1 import FlamingoV1_5_1
 from envs.flamingo_light_proto_v1.flamingo_light_proto_v1 import FlamingoLightProtoV1
 from envs.wrappers import TimeLimitWrapper, ActionInStateWrapper, StateStackWrapper, CommandWrapper, TimeInStateWrapper
 
 
 def build_env(config):
-    if config["env"]['id'] == "flamingo_v1_4_2":
-      env = FlamingoV1_4_2(config)
     if config["env"]['id'] == "flamingo_v1_5_1":
       env = FlamingoV1_5_1(config)
     elif config["env"]['id'] == "flamingo_light_proto_v1":

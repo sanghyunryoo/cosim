@@ -51,6 +51,7 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.computed_torques = np.zeros(self.action_dim)
         self.applied_torques = np.zeros(self.action_dim)
         self.obs = None
+        self.scaled_obs = None
         self.viewer = None
         self.mode = None
 
@@ -97,7 +98,9 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         projected_gravity = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"],
                                           lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
         obs = np.concatenate([q, qd, omega, projected_gravity])
-        return obs
+        scaled_obs = np.concatenate([q * self.config["obs_scales"]["dof_pos"], qd * self.config["obs_scales"]["dof_vel"], omega * self.config["obs_scales"]["ang_vel"], projected_gravity])
+     
+        return obs, scaled_obs
 
     def step(self, action):
         self.action = action
@@ -138,14 +141,14 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.applied_torques = np.concatenate([hip_action_clipped, shoulder_action_clipped, leg_action_clipped, wheel_action_clipped])
         self.do_simulation(self.applied_torques, self.frame_skip)
 
-        self.obs = self._get_obs()
+        self.obs, self.scaled_obs = self._get_obs()
         terminated = self._is_done()
         truncated = False
         info = self._get_info()
 
         self.previous_action = self.action
 
-        return self.obs, terminated, truncated, info
+        return self.scaled_obs, terminated, truncated, info
 
     def _get_info(self):
         q = self.data.qpos[self.q_indices]
@@ -194,8 +197,8 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         mujoco.mj_resetData(self.model, self.data)
         self.data.qpos[:] = self.initial_qpos()
         self.data.qvel[:] = 0
-        self.obs = self._get_obs()
-        return self.obs
+        self.obs, self.scaled_obs = self._get_obs()
+        return self.scaled_obs
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)

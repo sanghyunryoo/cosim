@@ -232,11 +232,17 @@ class CommandWrapper(BaseEnv):
         self.action_dim = env.action_dim
         self.command_dim = config["env"]["command_dim"]
         self.user_command = np.zeros(config["env"]["command_dim"])
+        self.scaled_command = np.zeros(config["env"]["command_dim"])
         self.reset_flag = False
+        assert self.command_dim >= 3, "command_dim must be greater than 2."
 
     def receive_user_command(self, user_command):
         self.user_command = user_command[:self.command_dim]
-
+        self.scaled_command[:] = user_command
+        self.scaled_command[0] *= self.config["obs_scales"]["lin_vel"]
+        self.scaled_command[1] *= self.config["obs_scales"]["lin_vel"]
+        self.scaled_command[2] *= self.config["obs_scales"]["ang_vel"]
+    
     def reset(self):
         self.reset_flag = True
         init_state, info = self.env.reset()
@@ -246,13 +252,13 @@ class CommandWrapper(BaseEnv):
 
     def step(self, action: np.ndarray):
         assert self.reset_flag is True, "Call `reset()` before calling `step()`."
+
         next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, self.user_command))
+        next_state = np.concatenate((next_state, self.scaled_command))
 
         info["lin_vel_x_command"] = self.user_command[0]
         info["lin_vel_y_command"] = self.user_command[1]
-        if len(self.user_command) > 2:
-            info["ang_vel_z_command"] = self.user_command[2]
+        info["ang_vel_z_command"] = self.user_command[2]
         if len(self.user_command) > 3:
             info["pos_z_command"] = self.user_command[3]
         if len(self.user_command) > 4:
@@ -270,3 +276,4 @@ class CommandWrapper(BaseEnv):
 
     def close(self):
         self.env.close()
+
