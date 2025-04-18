@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.2.0")
+        self.setWindowTitle("cosim  -  v1.3.0")
         self.resize(950, 1000)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
@@ -89,6 +89,9 @@ class MainWindow(QMainWindow):
         self.command_initial_value_le_list = []
         self.command_timer = None
 
+        # === Added: Observation Scales inputs ===
+        self.obs_scales_le = {}  # dict to hold QLineEdit for obs_scales
+
     def _init_default_command_values(self):
         try:
             self.current_command_values = [float(widget.text()) for widget in self.command_initial_value_le_list]
@@ -105,20 +108,19 @@ class MainWindow(QMainWindow):
         self.Kd_hip.setText(h_settings["Kd_hip"]) if h_settings.get("Kd_hip") else self.Kd_hip.setText("N/A")
         self.Kd_leg.setText(h_settings["Kd_leg"]) if h_settings.get("Kd_leg") else self.Kd_leg.setText("N/A")
         self.Kd_shoulder.setText(h_settings["Kd_shoulder"]) if h_settings.get("Kd_shoulder") else self.Kd_shoulder.setText("N/A")
-        
         self.Kp_wheel.setText(h_settings["Kp_wheel"]) if h_settings.get("Kp_wheel") else self.Kp_wheel.setText("N/A")
         self.Kd_wheel.setText(h_settings["Kd_wheel"]) if h_settings.get("Kd_wheel") else self.Kd_wheel.setText("N/A")
         self.joint_max_torque_le.setText(h_settings["joint_max_torque"])
         self.wheel_max_torque_le.setText(h_settings["wheel_max_torque"])
 
-        # Optional Settings: If users set the env values, it automatically update the 'le' values.
+        # Optional env settings
         env_settings = settings.get("env")
         if isinstance(env_settings, dict):
             observation_dim = env_settings["observation_dim"]
             action_dim = env_settings["action_dim"]
             command_dim = env_settings["command_dim"]
-            command_0_max = "1.5"  # lin_vel
-            command_1_max = "1.5"  # ang_vel
+            command_0_max = "1.5"
+            command_1_max = "1.5"
 
             if command_dim is not None:
                 self.command_dim_le.setText(str(command_dim))
@@ -127,13 +129,19 @@ class MainWindow(QMainWindow):
             if observation_dim is not None:
                 self.observation_dim_le.setText(str(observation_dim))
             if command_0_max is not None:
-                self.max_command_value_le_list[0].setText(str(command_0_max))
+                self.max_command_value_le_list[0].setText(command_0_max)
             if command_1_max is not None:
-                self.max_command_value_le_list[2].setText(str(command_1_max))
+                self.max_command_value_le_list[2].setText(command_1_max)
 
-        # command[3]의 초기값은 환경에 따라 갱신
+        # Update command[3] initial value
         if isinstance(self.command_initial_value_le_list[3], QLineEdit):
             self.command_initial_value_le_list[3].setText(env_settings["command_3_initial"])
+
+        # === Added: Update Observation Scales on env change ===
+        obs_scales = settings.get("obs_scales", {})
+        for key, le in self.obs_scales_le.items():
+            if key in obs_scales:
+                le.setText(str(obs_scales[key]))
 
     def showEvent(self, event):
         self.centralWidget().setFocus()
@@ -206,7 +214,10 @@ class MainWindow(QMainWindow):
             max_command_value = self._parse_float(self.max_command_value_le_list[cmd_index].text(), 2.0)
             current_value = self.current_command_values[cmd_index]
             new_value = current_value + direction * step
-            new_value = min(new_value, max_command_value) if direction > 0 else max(new_value, -max_command_value)
+            if direction > 0:
+                new_value = min(new_value, max_command_value)
+            else:
+                new_value = max(new_value, -max_command_value)
             self.current_command_values[cmd_index] = new_value
             self._update_command_button(cmd_index, new_value)
 
@@ -221,6 +232,9 @@ class MainWindow(QMainWindow):
         except Exception:
             return default
 
+    # ---------------------------------------------------------------------
+    #                               UI SETUP
+    # ---------------------------------------------------------------------
     def _setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -272,12 +286,28 @@ class MainWindow(QMainWindow):
 
         self._apply_styles()
 
+    # ---------------------------------------------------------------------
+    #       CONFIG GROUPS  (env, policy, obs_scales are now separate)
+    # ---------------------------------------------------------------------
     def _create_top_config_groups(self):
         top_layout = QHBoxLayout()
         top_layout.setSpacing(15)
         self.config_layout.addLayout(top_layout)
+
+        # Environment group on the left
         self._create_env_group(top_layout)
-        self._create_policy_group(top_layout)  # Policy 그룹에 ONNX 파일 선택 포함
+
+        # Container (vertical) on the right for Policy + Observation Scales
+        policy_container = QVBoxLayout()
+        policy_container.setSpacing(10)
+        top_layout.addLayout(policy_container, 1)
+
+        # Policy Settings group
+        self._create_policy_group(policy_container)
+
+        # Observation Scales group (now OUTSIDE Policy Settings)
+        obs_group = self._create_obs_scales_group()
+        policy_container.addWidget(obs_group, 0)
 
     def _create_env_group(self, parent_layout):
         env_group = QGroupBox("Environment Settings")
@@ -297,7 +327,11 @@ class MainWindow(QMainWindow):
         env_layout.addRow("ID:", self.env_id_cb)
 
         self.terrain_id_cb = NoWheelComboBox()
-        self.terrain_id_cb.addItems(['flat', 'rocky_easy', 'rocky_hard', 'slope_easy', 'slope_hard', 'stairs_easy', 'stairs_hard'])
+        self.terrain_id_cb.addItems([
+            'flat', 'rocky_easy', 'rocky_hard',
+            'slope_easy', 'slope_hard',
+            'stairs_easy', 'stairs_hard'
+        ])
         self.terrain_id_cb.setCurrentText("flat")
         env_layout.addRow("Terrain:", self.terrain_id_cb)
 
@@ -327,7 +361,6 @@ class MainWindow(QMainWindow):
 
         parent_layout.addWidget(env_group, 1)
 
-
     def _create_policy_group(self, parent_layout):
         policy_group = QGroupBox("Policy Settings")
         policy_group.setStyleSheet(
@@ -350,7 +383,7 @@ class MainWindow(QMainWindow):
         self.c_in_dim_le = QLineEdit("256")
         policy_layout.addRow("c_in Dim:", self.c_in_dim_le)
 
-        # ONNX 파일 선택 부분 추가 (이전 _create_policy_file_group() 대신)
+        # ONNX 파일 선택 부분
         self.policy_file_le = QLineEdit()
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self.browse_policy_file)
@@ -359,10 +392,31 @@ class MainWindow(QMainWindow):
         file_layout.addWidget(browse_btn)
         policy_layout.addRow("ONNX File:", file_layout)
 
-        parent_layout.addWidget(policy_group, 1)
+        parent_layout.addWidget(policy_group, 0)
 
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QLineEdit
+    # ---- 새로 분리된 Observation Scales 그룹 ----
+    def _create_obs_scales_group(self):
+        obs_group = QGroupBox("Observation Scales")
+        obs_group.setStyleSheet(
+            "QGroupBox { font-weight: bold; border: 1px solid gray; border-radius: 5px; margin-top: 10px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }"
+        )
+        obs_form = QFormLayout()
+        obs_form.setLabelAlignment(Qt.AlignRight)
+        obs_form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        obs_form.setSpacing(8)
+        obs_group.setLayout(obs_form)
+
+        settings = self.env_config[self.env_id_cb.currentText()]
+        obs_scales = settings.get("obs_scales", {})
+        for key in ["lin_vel", "ang_vel", "dof_pos", "dof_vel"]:
+            default = obs_scales.get(key, 1.0)
+            le = QLineEdit(str(default))
+            le.setFixedWidth(50)
+            obs_form.addRow(f"{key}:", le)
+            self.obs_scales_le[key] = le
+
+        return obs_group
 
     def _create_hardware_group(self):
         hardware_group = QGroupBox("Hardware Settings")
@@ -371,23 +425,13 @@ class MainWindow(QMainWindow):
             "QGroupBox::title { subcontrol-origin: margin; left: 5px; padding: 0 2px; }"
         )
 
-        # 최상위 레이아웃 (수직)
         v_layout_main = QVBoxLayout()
         v_layout_main.setContentsMargins(2, 2, 2, 2)
         v_layout_main.setSpacing(10)
-        # 전체를 왼쪽 정렬
         v_layout_main.setAlignment(Qt.AlignLeft)
         hardware_group.setLayout(v_layout_main)
 
         settings = self.env_config.get(self.env_id_cb.currentText(), {})
-
-        # -------------------- (1) 상단: 관절별 P, D 게인 설정 --------------------
-        gains_layout = QHBoxLayout()
-        gains_layout.setContentsMargins(2, 2, 2, 2)
-        gains_layout.setSpacing(10)
-        # 왼쪽 정렬
-        gains_layout.setAlignment(Qt.AlignLeft)
-        v_layout_main.addLayout(gains_layout)
 
         joints = [
             ("Hip", settings.get("Kp_hip", "0.0"), settings.get("Kd_hip", "0.0")),
@@ -399,42 +443,41 @@ class MainWindow(QMainWindow):
         def create_line_edit(default_value):
             le = QLineEdit(str(default_value))
             le.setFixedWidth(45)
-            # 입력값을 왼쪽 정렬
             le.setAlignment(Qt.AlignLeft)
             font = le.font()
             font.setPointSize(6)
             le.setFont(font)
             return le
 
+        gains_layout = QHBoxLayout()
+        gains_layout.setContentsMargins(2, 2, 2, 2)
+        gains_layout.setSpacing(10)
+        gains_layout.setAlignment(Qt.AlignLeft)
+        v_layout_main.addLayout(gains_layout)
+
         for joint_name, kp, kd in joints:
             joint_widget = QWidget()
             v_layout = QVBoxLayout(joint_widget)
             v_layout.setContentsMargins(1, 1, 1, 1)
             v_layout.setSpacing(2)
-            # 왼쪽 정렬
             v_layout.setAlignment(Qt.AlignLeft)
 
-            # 관절명 라벨
             joint_label = QLabel(joint_name)
-            # 라벨 왼쪽 정렬
             joint_label.setAlignment(Qt.AlignLeft)
             font_label = joint_label.font()
             font_label.setPointSize(6)
             joint_label.setFont(font_label)
             v_layout.addWidget(joint_label)
 
-            # P, D 게인 부분
             gains_sub_layout = QHBoxLayout()
             gains_sub_layout.setContentsMargins(1, 1, 1, 1)
             gains_sub_layout.setSpacing(2)
-            # 왼쪽 정렬
             gains_sub_layout.setAlignment(Qt.AlignLeft)
 
             p_label = QLabel("P:")
             p_label.setAlignment(Qt.AlignLeft)
             p_label.setFont(font_label)
             p_gain = create_line_edit(kp)
-
             d_label = QLabel("D:")
             d_label.setAlignment(Qt.AlignLeft)
             d_label.setFont(font_label)
@@ -445,10 +488,8 @@ class MainWindow(QMainWindow):
             gains_sub_layout.addWidget(d_label)
             gains_sub_layout.addWidget(d_gain)
             v_layout.addLayout(gains_sub_layout)
-
             gains_layout.addWidget(joint_widget)
 
-            # 인스턴스 변수에 저장 (필요 시 사용)
             if joint_name.lower() == "hip":
                 self.Kp_hip, self.Kd_hip = p_gain, d_gain
             elif joint_name.lower() == "shoulder":
@@ -458,16 +499,12 @@ class MainWindow(QMainWindow):
             elif joint_name.lower() == "wheel":
                 self.Kp_wheel, self.Kd_wheel = p_gain, d_gain
 
-        # -------------------- (2) 하단: Joint Max Torque, Wheel Max Torque --------------------
         torque_layout = QHBoxLayout()
         torque_layout.setContentsMargins(2, 2, 2, 2)
         torque_layout.setSpacing(15)
-        # 왼쪽 정렬
         torque_layout.setAlignment(Qt.AlignLeft)
 
-        # Joint Max Torque
         joint_max_torque_label = QLabel("Joint Max Torque:")
-        # 라벨 왼쪽 정렬
         joint_max_torque_label.setAlignment(Qt.AlignLeft)
         joint_max_torque_label.setStyleSheet("font-size: 12px;")
         joint_max_torque_value = settings.get("joint_max_torque", "100")
@@ -476,9 +513,7 @@ class MainWindow(QMainWindow):
         torque_layout.addWidget(joint_max_torque_label)
         torque_layout.addWidget(self.joint_max_torque_le)
 
-        # Wheel Max Torque
         wheel_max_torque_label = QLabel("Wheel Max Torque:")
-        # 라벨 왼쪽 정렬
         wheel_max_torque_label.setAlignment(Qt.AlignLeft)
         wheel_max_torque_label.setStyleSheet("font-size: 12px;")
         wheel_max_torque_value = settings.get("wheel_max_torque", "100")
@@ -488,8 +523,6 @@ class MainWindow(QMainWindow):
         torque_layout.addWidget(self.wheel_max_torque_le)
 
         v_layout_main.addLayout(torque_layout)
-
-        # 완성된 groupBox를 config 레이아웃에 추가
         self.config_layout.addWidget(hardware_group)
 
     def _create_random_group(self):
@@ -651,7 +684,7 @@ class MainWindow(QMainWindow):
         key_layout.addWidget(zx_group)
         parent_layout.addWidget(key_group, 1)
 
-        # Set key mapping for command value adjustments
+        # Set key mapping
         self.key_mapping = {
             Qt.Key_W: (self.btn_up, 0, +1.0),
             Qt.Key_S: (self.btn_down, 0, -1.0),
@@ -757,6 +790,12 @@ class MainWindow(QMainWindow):
                     "c_in_dim": int(self.c_in_dim_le.text().strip()),
                     "onnx_file": os.path.basename(self.policy_file_le.text())
                 },
+                # === Added: include obs_scales in config ===
+                "obs_scales": {
+                    key: float(le.text())
+                    for key, le in self.obs_scales_le.items()
+                },
+                
                 "random": {
                     "precision": self.precision_cb.currentText(),
                     "sensor_noise": self.sensor_noise_cb.currentText(),
@@ -782,6 +821,7 @@ class MainWindow(QMainWindow):
                     "wheel_max_torque": float(self.wheel_max_torque_le.text().strip())
                 }
             }
+            # load random_table
             cur_file_path = os.path.abspath(__file__)
             config_path = os.path.join(os.path.dirname(cur_file_path), "../config/random_table.yaml")
             config_path = os.path.abspath(config_path)

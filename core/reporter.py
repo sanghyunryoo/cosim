@@ -291,9 +291,9 @@ class Reporter:
             # ===============================
             # 마지막 페이지들: Configuration 테이블
             # ===============================
-            filtered_config = {k: v for k, v in self.config.items() if k in ["env", "policy", "random", "hardware"]}
+            filtered_config = {k: v for k, v in self.config.items() if k in ["env", "policy", "random", "hardware", "obs_scales"]}
             table_data = self._build_config_rows(filtered_config)
-            MAX_ROWS_PER_PAGE = 40
+            MAX_ROWS_PER_PAGE = 50
             total_rows = len(table_data)
             n_pages = math.ceil(total_rows / MAX_ROWS_PER_PAGE)
 
@@ -314,7 +314,7 @@ class Reporter:
                                  cellLoc='left')
                 table.auto_set_font_size(False)
                 table.set_fontsize(10)
-                table.scale(1, 1.5)
+                table.scale(1, 1.4)
 
                 for (row, col), cell in table.get_celld().items():
                     if row == 0:
@@ -326,8 +326,8 @@ class Reporter:
                         # "Parameter" 컬럼(보통 col == 0)에서 텍스트를 확인
                         if col == 0:
                             text_str = cell.get_text().get_text().strip()
-                            # env, policy, random, hardware라면 굵게
-                            if text_str in ["env", "policy", "random", "hardware"]:
+                            # env, policy, random, hardware, obs_scales라면 굵게
+                            if text_str in ["env", "policy", "random", "hardware", "obs_scales"]:
                                 cell.set_text_props(fontweight='bold')
 
                 pdf.savefig(fig_config)
