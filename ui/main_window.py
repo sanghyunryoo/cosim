@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.3.0")
+        self.setWindowTitle("cosim  -  v1.3.1")
         self.resize(950, 1000)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)

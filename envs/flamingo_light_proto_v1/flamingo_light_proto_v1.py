@@ -194,7 +194,6 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         self.previous_action = np.zeros(self.action_dim)
         self.control_manager.reset()
         self.applied_torques = np.zeros(self.action_dim)
-        self.user_command = np.zeros(self.command_dim)
 
         mujoco.mj_resetData(self.model, self.data)
         self.data.qpos[:] = self.initial_qpos()
