@@ -242,7 +242,7 @@ class CommandWrapper(BaseEnv):
         self.scaled_command[0] *= self.config["obs_scales"]["lin_vel"]
         self.scaled_command[1] *= self.config["obs_scales"]["lin_vel"]
         self.scaled_command[2] *= self.config["obs_scales"]["ang_vel"]
-    
+
     def reset(self):
         self.reset_flag = True
         init_state, info = self.env.reset()
