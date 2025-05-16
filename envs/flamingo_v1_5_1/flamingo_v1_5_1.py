@@ -99,7 +99,7 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
                                           lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
         obs = np.concatenate([q, qd, omega, projected_gravity])
         scaled_obs = np.concatenate([q * self.config["obs_scales"]["dof_pos"], qd * self.config["obs_scales"]["dof_vel"], omega * self.config["obs_scales"]["ang_vel"], projected_gravity])
-     
+
         return obs, scaled_obs
 
     def step(self, action):
@@ -192,7 +192,6 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.previous_action = np.zeros(self.action_dim)
         self.control_manager.reset()
         self.applied_torques = np.zeros(self.action_dim)
-        self.user_command = np.zeros(self.command_dim)
 
         mujoco.mj_resetData(self.model, self.data)
         self.data.qpos[:] = self.initial_qpos()
