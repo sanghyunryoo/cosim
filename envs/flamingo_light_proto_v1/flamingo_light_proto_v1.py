@@ -213,6 +213,13 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
 
         return qpos
     
+    def event(self, event: str, value):
+        if event == 'push':
+            self.data.qvel[:3] = value[:]
+        else:
+            raise NotImplementedError(f"event:{event} is not supported.")
+
+    
     def close(self):
         if self.viewer is not None:
             if glfw.get_current_context() == self.viewer.window:

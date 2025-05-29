@@ -15,6 +15,7 @@ class Tester(QObject):
     def __init__(self):
         super().__init__()
         self.user_command = None
+        self._push_event = False
         self._stop = False  # 중단 플래그
 
     def load_config(self, config):
@@ -44,6 +45,14 @@ class Tester(QObject):
         if index < self.config["env"]["command_dim"]:
             self.user_command[index] = value
 
+    def activate_push_event(self, push_vel):
+        self._push_event = True
+        self._push_vel = push_vel
+
+    def deactivate_push_event(self):
+        self._push_event = False
+
+
     def test(self):
         # 환경, 정책, 리포터 생성
         self.policy = build_policy(self.config, policy_path=os.path.join(self.policy_path))
@@ -56,6 +65,10 @@ class Tester(QObject):
    
         # 테스트 루프
         while not done and not self._stop:
+            # 이벤트 발생
+            if self._push_event:
+                self.env.event(event="push", value=self._push_vel)
+
             self.env.render()
             # UI에서 업데이트된 command 값을 환경에 반영
             self.receive_user_command()

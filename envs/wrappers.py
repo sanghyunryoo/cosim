@@ -49,6 +49,13 @@ class BaseEnv(ABC):
         pass
 
     @abstractmethod
+    def event(self, event: str, value):
+        """
+        Triggers an event
+        """
+        pass
+
+    @abstractmethod
     def render(self):
         """
         Renders the environment.
@@ -100,6 +107,9 @@ class TimeLimitWrapper(BaseEnv):
             self.reset_flag = False
 
         return next_state, terminated, truncated, info
+    
+    def event(self, event: str, value):
+        return self.env.event(event, value)
 
     def render(self):
         self.env.render()
@@ -134,6 +144,9 @@ class ActionInStateWrapper(BaseEnv):
             self.reset_flag = False
 
         return next_state, terminated, truncated, info
+    
+    def event(self, event: str, value):
+        return self.env.event(event, value)
 
     def render(self):
         self.env.render()
@@ -177,43 +190,8 @@ class StateStackWrapper(BaseEnv):
 
         return next_state, terminated, truncated, info
 
-    def render(self):
-        self.env.render()
-
-    def close(self):
-        self.env.close()
-
-
-class TimeInStateWrapper(BaseEnv):
-    def __init__(self, env, config):
-        super().__init__()
-        self.env = env
-        self.config = config
-        self.id = env.id
-        self.state_dim = env.state_dim + 1
-        self.action_dim = env.action_dim
-        self.tick = 0.02  # 50Hz
-        self.time = 0
-        self.reset_flag = False
-
-    def reset(self):
-        self.reset_flag = True
-        self.time = 0
-        init_state, info = self.env.reset()
-        init_state = np.concatenate((init_state, np.zeros(1)))
-
-        return init_state, info
-
-    def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
-        self.time += self.tick
-        next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, np.array([self.time])))
-
-        if terminated or truncated:
-            self.reset_flag = False
-
-        return next_state, terminated, truncated, info
+    def event(self, event: str, value):
+        return self.env.event(event, value)
 
     def render(self):
         self.env.render()
@@ -271,9 +249,13 @@ class CommandWrapper(BaseEnv):
 
         return next_state, terminated, truncated, info
 
+    def event(self, event: str, value):
+        return self.env.event(event, value)
+
     def render(self):
         self.env.render()
 
     def close(self):
         self.env.close()
+
 

@@ -70,8 +70,8 @@ class MainWindow(QMainWindow):
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.3.1")
-        self.resize(950, 1000)
+        self.setWindowTitle("cosim  -  v1.4.0")
+        self.resize(950, 900)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
 
@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
 
         # === Added: Observation Scales inputs ===
         self.obs_scales_le = {}  # dict to hold QLineEdit for obs_scales
-
+        
     def _init_default_command_values(self):
         try:
             self.current_command_values = [float(widget.text()) for widget in self.command_initial_value_le_list]
@@ -265,6 +265,7 @@ class MainWindow(QMainWindow):
         top_h_layout.addLayout(right_v_layout, 1)
         self._create_command_settings_group(right_v_layout)
         self._setup_key_visual_buttons(right_v_layout)
+        self._create_event_input_group(right_v_layout)  # Added for push event
 
         self.status_label = QLabel("대기 중")
         self.status_label.setStyleSheet("font-size: 14px;")
@@ -285,6 +286,60 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(btn_layout)
 
         self._apply_styles()
+
+    # Added method for push event UI
+    def _create_event_input_group(self, parent_layout):
+        event_group = QGroupBox("Event Input")
+        event_group.setStyleSheet(
+            "QGroupBox { font-weight: bold; border: 1px solid gray; border-radius: 5px; margin-top: 10px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }"
+        )
+        event_layout = QFormLayout()
+        event_layout.setLabelAlignment(Qt.AlignRight)
+        event_layout.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        event_layout.setSpacing(8)
+        event_group.setLayout(event_layout)
+
+        push_vel_layout = QHBoxLayout()
+        self.push_vel_x_le = QLineEdit("0.0")
+        self.push_vel_x_le.setPlaceholderText("x")
+        self.push_vel_x_le.setFixedWidth(50)
+        self.push_vel_y_le = QLineEdit("0.0")
+        self.push_vel_y_le.setPlaceholderText("y")
+        self.push_vel_y_le.setFixedWidth(50)
+        self.push_vel_z_le = QLineEdit("0.0")
+        self.push_vel_z_le.setPlaceholderText("z")
+        self.push_vel_z_le.setFixedWidth(50)
+        push_vel_layout.addWidget(self.push_vel_x_le)
+        push_vel_layout.addWidget(self.push_vel_y_le)
+        push_vel_layout.addWidget(self.push_vel_z_le)
+
+        event_layout.addRow("Push Velocity (x, y, z):", push_vel_layout)
+
+        self.push_button = QPushButton("Push")
+        self.push_button.pressed.connect(self.activate_push_trigger)
+        self.push_button.released.connect(self.deactivate_push_trigger)
+        event_layout.addRow(self.push_button)
+
+        parent_layout.addWidget(event_group)
+
+    # Added method to handle push event activation
+    def activate_push_trigger(self):
+        if self.tester:
+            try:
+                push_vel = [
+                    float(self.push_vel_x_le.text()),
+                    float(self.push_vel_y_le.text()),
+                    float(self.push_vel_z_le.text())
+                ]
+                self.tester.activate_push_event(push_vel)
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input", "Push velocity must be numeric values.")
+
+    # Added method to handle push event deactivation
+    def deactivate_push_trigger(self):
+        if self.tester:
+            self.tester.deactivate_push_event()
 
     # ---------------------------------------------------------------------
     #       CONFIG GROUPS  (env, policy, obs_scales are now separate)
@@ -335,7 +390,7 @@ class MainWindow(QMainWindow):
         self.terrain_id_cb.setCurrentText("flat")
         env_layout.addRow("Terrain:", self.terrain_id_cb)
 
-        self.max_duration_le = QLineEdit("180.0")
+        self.max_duration_le = QLineEdit("120.0")
         env_layout.addRow("Max Duration:", self.max_duration_le)
         self.observation_dim_le = QLineEdit("20")
         env_layout.addRow("Observation Dim:", self.observation_dim_le)
@@ -349,10 +404,10 @@ class MainWindow(QMainWindow):
         self.action_in_state_cb.setCurrentText("True")
         env_layout.addRow("Action in State:", self.action_in_state_cb)
 
-        self.time_in_state_cb = NoWheelComboBox()
-        self.time_in_state_cb.addItems(["True", "False"])
-        self.time_in_state_cb.setCurrentText("False")
-        env_layout.addRow("Time in State:", self.time_in_state_cb)
+        self.use_elevation_map = NoWheelComboBox()
+        self.use_elevation_map.addItems(["N/A"])
+        self.use_elevation_map.setCurrentText("N/A")
+        env_layout.addRow("Use Elevation Map:", self.use_elevation_map)
 
         self.num_stack_cb = NoWheelComboBox()
         self.num_stack_cb.addItems([str(i) for i in range(1, 16)])
@@ -409,6 +464,11 @@ class MainWindow(QMainWindow):
 
         settings = self.env_config[self.env_id_cb.currentText()]
         obs_scales = settings.get("obs_scales", {})
+        obs_scales["lin_vel"] = 2.0
+        obs_scales["ang_vel"] = 0.25
+        obs_scales["dof_pos"] = 1.0
+        obs_scales["dof_vel"] = 0.15
+        
         for key in ["lin_vel", "ang_vel", "dof_pos", "dof_vel"]:
             default = obs_scales.get(key, 1.0)
             le = QLineEdit(str(default))
@@ -777,7 +837,7 @@ class MainWindow(QMainWindow):
                     "id": self.env_id_cb.currentText(),
                     "terrain": self.terrain_id_cb.currentText(),
                     "action_in_state": self.action_in_state_cb.currentText() == "True",
-                    "time_in_state": self.time_in_state_cb.currentText() == "True",
+                    "use_elevation_map": self.use_elevation_map.currentText() == "True",
                     "max_duration": float(self.max_duration_le.text().strip()),
                     "observation_dim": int(self.observation_dim_le.text().strip()),
                     "command_dim": int(self.command_dim_le.text().strip()),
@@ -880,3 +940,9 @@ class MainWindow(QMainWindow):
         self.reset_command_buttons()
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())

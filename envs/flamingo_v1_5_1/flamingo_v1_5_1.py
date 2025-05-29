@@ -206,6 +206,12 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         qpos[7:15] = np.array([0, 0.0, -0.0, 0, 0, 0.0, -0.0, 0])
         qpos[7:15] = uniform_noisy_data(qpos[7:15], lower=-self.init_noise, upper=self.init_noise)
         return qpos
+    
+    def event(self, event: str, value):
+        if event == 'push':
+            self.data.qvel[:3] = value[:]
+        else:
+            raise NotImplementedError(f"event:{event} is not supported.")
 
     def close(self):
         if self.viewer is not None:
