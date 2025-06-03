@@ -220,7 +220,7 @@ class Reporter:
                     n_cols = 2
                     n_rows = math.ceil(n_plots / 2)
                 fig, axes = plt.subplots(n_rows, n_cols, figsize=PAGE_SIZE)
-                fig.suptitle("Command vs. Actual Values", fontsize=16, fontweight='bold')
+                fig.suptitle("Command vs. Actual Values (Velocity-based)", fontsize=16, fontweight='bold')
 
                 if n_rows * n_cols == 1:
                     axes = np.array([axes])
@@ -314,7 +314,7 @@ class Reporter:
                                  cellLoc='left')
                 table.auto_set_font_size(False)
                 table.set_fontsize(10)
-                table.scale(1, 1.4)
+                table.scale(1, 1.2)
 
                 for (row, col), cell in table.get_celld().items():
                     if row == 0:

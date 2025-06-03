@@ -10,6 +10,7 @@ class MLPPolicy:
 
     def get_action(self, state: np.ndarray):
         state = state.astype(np.float32)
+        
         try:
             _state = np.expand_dims(state, axis=0)
             action = self.ort_session.run(self.output_names, {self.input_name: _state})[0]

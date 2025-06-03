@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication
 )
 from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt, QEvent, QUrl
-from PyQt5.QtGui import QDesktopServices, QIcon
+from PyQt5.QtGui import QDesktopServices, QIcon, QDoubleValidator, QIntValidator
 from core.tester import Tester
 
 
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
         self.setWindowTitle("cosim  -  v1.4.0")
-        self.resize(950, 900)
+        self.resize(1080, 900)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
 
@@ -142,6 +142,12 @@ class MainWindow(QMainWindow):
         for key, le in self.obs_scales_le.items():
             if key in obs_scales:
                 le.setText(str(obs_scales[key]))
+        
+        scale_commands = obs_scales.get("scale_commands", True)
+        if scale_commands:
+            self.scale_commands_cb.setCurrentText("True")
+        else:
+            self.scale_commands_cb.setCurrentText("False")     
 
     def showEvent(self, event):
         self.centralWidget().setFocus()
@@ -391,7 +397,7 @@ class MainWindow(QMainWindow):
         env_layout.addRow("Terrain:", self.terrain_id_cb)
 
         self.max_duration_le = QLineEdit("120.0")
-        env_layout.addRow("Max Duration:", self.max_duration_le)
+        env_layout.addRow("Max Duration (s):", self.max_duration_le)
         self.observation_dim_le = QLineEdit("20")
         env_layout.addRow("Observation Dim:", self.observation_dim_le)
         self.command_dim_le = QLineEdit("6")
@@ -404,15 +410,58 @@ class MainWindow(QMainWindow):
         self.action_in_state_cb.setCurrentText("True")
         env_layout.addRow("Action in State:", self.action_in_state_cb)
 
-        self.use_elevation_map = NoWheelComboBox()
-        self.use_elevation_map.addItems(["N/A"])
-        self.use_elevation_map.setCurrentText("N/A")
-        env_layout.addRow("Use Elevation Map:", self.use_elevation_map)
-
         self.num_stack_cb = NoWheelComboBox()
         self.num_stack_cb.addItems([str(i) for i in range(1, 16)])
         self.num_stack_cb.setCurrentText("3")
         env_layout.addRow("Num Stack:", self.num_stack_cb)
+
+        self.external_sensors_cb = NoWheelComboBox()
+        self.external_sensors_cb.addItems(["height_map", "scaled_base_lin_vel", "All", "None"])
+        self.external_sensors_cb.setCurrentText("None")
+        env_layout.addRow("External Sensors:", self.external_sensors_cb)
+
+        self.external_sensors_Hz_cb = NoWheelComboBox()
+        self.external_sensors_Hz_cb.addItems(["10"])
+        self.external_sensors_Hz_cb.setCurrentText("10")
+        env_layout.addRow("External Sensors Hz:", self.external_sensors_Hz_cb)
+
+        self.height_size_x_le = QLineEdit()
+        self.height_size_x_le.setFixedWidth(50)
+        self.height_size_x_le.setPlaceholderText("x (m)")
+        double_validator = QDoubleValidator(0.000001, 1e6, 4)  
+        double_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.height_size_x_le.setValidator(double_validator)
+        self.height_size_x_le.setText("1.0")  
+
+        self.height_size_y_le = QLineEdit()
+        self.height_size_y_le.setFixedWidth(50)
+        self.height_size_y_le.setPlaceholderText("y (m)")
+        self.height_size_y_le.setValidator(double_validator)
+        self.height_size_y_le.setText("0.6")   
+
+        self.height_res_x_le = QLineEdit()
+        self.height_res_x_le.setFixedWidth(50)
+        self.height_res_x_le.setPlaceholderText("x_res")
+        int_validator = QIntValidator(1, 10000)  
+        self.height_res_x_le.setValidator(int_validator)
+        self.height_res_x_le.setText("15")      
+
+        self.height_res_y_le = QLineEdit()
+        self.height_res_y_le.setFixedWidth(50)
+        self.height_res_y_le.setPlaceholderText("y_res")
+        self.height_res_y_le.setValidator(int_validator)
+        self.height_res_y_le.setText("9")      
+
+        size_res_layout = QHBoxLayout()
+        size_res_layout.setSpacing(4)
+        size_res_layout.addWidget(self.height_size_x_le)
+        size_res_layout.addWidget(QLabel("×"))
+        size_res_layout.addWidget(self.height_size_y_le)
+        size_res_layout.addWidget(QLabel(" Res:"))
+        size_res_layout.addWidget(self.height_res_x_le)
+        size_res_layout.addWidget(QLabel("×"))
+        size_res_layout.addWidget(self.height_res_y_le)
+        env_layout.addRow("Height Map Size (m):", size_res_layout)
 
         parent_layout.addWidget(env_group, 1)
 
@@ -438,7 +487,7 @@ class MainWindow(QMainWindow):
         self.c_in_dim_le = QLineEdit("256")
         policy_layout.addRow("c_in Dim:", self.c_in_dim_le)
 
-        # ONNX 파일 선택 부분
+        # ONNX File
         self.policy_file_le = QLineEdit()
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self.browse_policy_file)
@@ -449,7 +498,7 @@ class MainWindow(QMainWindow):
 
         parent_layout.addWidget(policy_group, 0)
 
-    # ---- 새로 분리된 Observation Scales 그룹 ----
+    # ---- Observation Scales Group ----
     def _create_obs_scales_group(self):
         obs_group = QGroupBox("Observation Scales")
         obs_group.setStyleSheet(
@@ -457,24 +506,29 @@ class MainWindow(QMainWindow):
             "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }"
         )
         obs_form = QFormLayout()
-        obs_form.setLabelAlignment(Qt.AlignRight)
+        obs_form.setLabelAlignment(Qt.AlignLeft)
         obs_form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         obs_form.setSpacing(8)
         obs_group.setLayout(obs_form)
 
         settings = self.env_config[self.env_id_cb.currentText()]
         obs_scales = settings.get("obs_scales", {})
-        obs_scales["lin_vel"] = 2.0
-        obs_scales["ang_vel"] = 0.25
-        obs_scales["dof_pos"] = 1.0
-        obs_scales["dof_vel"] = 0.15
-        
+
         for key in ["lin_vel", "ang_vel", "dof_pos", "dof_vel"]:
             default = obs_scales.get(key, 1.0)
             le = QLineEdit(str(default))
             le.setFixedWidth(50)
             obs_form.addRow(f"{key}:", le)
             self.obs_scales_le[key] = le
+     
+        self.scale_commands_cb = NoWheelComboBox()
+        self.scale_commands_cb.addItems(["True", "False"])
+        scale_commands = obs_scales.get("scale_commands", True)
+        if scale_commands:
+            self.scale_commands_cb.setCurrentText("True")
+        else:
+            self.scale_commands_cb.setCurrentText("False")        
+        obs_form.addRow("scale_commands:", self.scale_commands_cb)
 
         return obs_group
 
@@ -837,12 +891,17 @@ class MainWindow(QMainWindow):
                     "id": self.env_id_cb.currentText(),
                     "terrain": self.terrain_id_cb.currentText(),
                     "action_in_state": self.action_in_state_cb.currentText() == "True",
-                    "use_elevation_map": self.use_elevation_map.currentText() == "True",
                     "max_duration": float(self.max_duration_le.text().strip()),
                     "observation_dim": int(self.observation_dim_le.text().strip()),
                     "command_dim": int(self.command_dim_le.text().strip()),
                     "action_dim": int(self.action_dim_le.text().strip()),
                     "num_stack": int(self.num_stack_cb.currentText()),
+                    "external_sensors":  self.external_sensors_cb.currentText(),
+                    "external_sensors_Hz": self.external_sensors_Hz_cb.currentText(),
+                    "height_map": {"x_size": float(self.height_size_x_le.text().strip()),
+                                   "y_size": float(self.height_size_y_le.text().strip()),
+                                   "x_res": int(self.height_res_x_le.text().strip()),
+                                   "y_res": int(self.height_res_y_le.text().strip()),}
                 },
                 "policy": {
                     "use_lstm": self.use_lstm_cb.currentText() == "True",
@@ -850,7 +909,7 @@ class MainWindow(QMainWindow):
                     "c_in_dim": int(self.c_in_dim_le.text().strip()),
                     "onnx_file": os.path.basename(self.policy_file_le.text())
                 },
-                # === Added: include obs_scales in config ===
+
                 "obs_scales": {
                     key: float(le.text())
                     for key, le in self.obs_scales_le.items()
@@ -881,6 +940,8 @@ class MainWindow(QMainWindow):
                     "wheel_max_torque": float(self.wheel_max_torque_le.text().strip())
                 }
             }
+            config["obs_scales"]["scale_commands"] =  self.scale_commands_cb.currentText() == "True"
+
             # load random_table
             cur_file_path = os.path.abspath(__file__)
             config_path = os.path.join(os.path.dirname(cur_file_path), "../config/random_table.yaml")
@@ -940,9 +1001,4 @@ class MainWindow(QMainWindow):
         self.reset_command_buttons()
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+        

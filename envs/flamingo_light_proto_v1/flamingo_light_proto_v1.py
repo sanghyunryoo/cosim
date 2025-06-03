@@ -22,6 +22,10 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         self.command_dim = config["env"]["command_dim"]
         self.render_mode = render_mode
         self.render_flag = render_flag
+        if config["env"]["external_sensors"] == "None":
+            self.use_external_sensors = False
+        else:
+            self.use_external_sensors = True
 
         # PD control parameters
         self.kp_shoulder = config["hardware"]["Kp_shoulder"]
@@ -39,6 +43,9 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         self.dt_ = config["random_table"]["precision"][precision_level]["timestep"]
         self.frame_skip = config["random_table"]["precision"][precision_level]["frame_skip"]
         self.sensor_noise_map = config["random_table"]["sensor_noise"][sensor_noise_level]
+        self.control_freq = 1 / (self.dt_ * self.frame_skip)
+        self.local_step = 0
+
 
         # Set Placeholders
         self.action = np.zeros(self.action_dim)
@@ -50,6 +57,9 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         self.scaled_obs = None
         self.viewer = None
         self.mode = None
+        if self.use_external_sensors:
+            self.external_obs = {}
+            self.external_obs_freq = float(self.config['env']['external_sensors_Hz'])
 
         # Domain Randomization
         self.xml_manager = XMLManager(config)
@@ -68,6 +78,14 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         # Set other Managers and Helpers
         self.control_manager = ControlManager(config)
         self.mujoco_utils = MuJoCoUtils(self.model)
+
+        # Height Map
+        if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
+            self.x_size = self.config["env"]["height_map"]["x_size"]
+            self.y_size = self.config["env"]["height_map"]["y_size"]
+            self.x_res = self.config["env"]["height_map"]["x_res"]
+            self.y_res = self.config["env"]["height_map"]["y_res"]
+            self.mujoco_utils.init_heightmap_visualization(self.x_res, self.y_res)
 
         # Set Indices of q and qd
         qpos_joint_names = ["left_shoulder_joint", "right_shoulder_joint"]
@@ -97,7 +115,30 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         scaled_obs = np.concatenate([q * self.config["obs_scales"]["dof_pos"], qd * self.config["obs_scales"]["dof_vel"], omega * self.config["obs_scales"]["ang_vel"], projected_gravity])
      
         return obs, scaled_obs
+    
+    def _get_external_obs(self):
+        if not self.use_external_sensors:
+            return None
 
+        base_lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)  # [vx, vy, vz]
+        base_lin_vel = truncated_gaussian_noisy_data(base_lin_vel, mean=self.sensor_noise_map["base_lin_vel"]["mean"], std=self.sensor_noise_map["base_lin_vel"]["std"],
+                                                      lower=self.sensor_noise_map["base_lin_vel"]["lower"], upper=self.sensor_noise_map["base_lin_vel"]["upper"])
+        scaled_base_lin_vel = base_lin_vel * self.config["obs_scales"]["lin_vel"]  # scaled_base_lin_vel
+
+        if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
+            height_map = self.mujoco_utils.get_height_map(self.data, self.x_size, self.y_size, self.x_res,self.y_res)  # height_map
+            height_map = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"],
+                                                        lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
+        else:
+            height_map = None
+            
+        tick = int(self.control_freq / self.external_obs_freq)
+        if self.local_step % tick == 0:     
+            self.external_obs["scaled_base_lin_vel"] = scaled_base_lin_vel
+            self.external_obs["height_map"] = height_map
+
+        return self.external_obs
+    
     def step(self, action):
         try:
             self.action = action
@@ -137,6 +178,7 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
             info = self._get_info()
 
             self.previous_action = self.action
+            self.local_step += 1
 
         except Exception as e:
             print(f"[FlamingoLightProtoV1] ERROR: {e}")
@@ -164,6 +206,10 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
             "cur_state": cur_state
         }
 
+        self.external_obs = self._get_external_obs()
+        if self.external_obs is not None:
+            info['scaled_base_lin_vel'] = self.external_obs['scaled_base_lin_vel']
+            info['height_map'] = self.external_obs['height_map']
         return info
 
     def _get_reset_info(self):
@@ -190,6 +236,7 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         return False
 
     def reset_model(self):
+        self.local_step = 0
         self.action = np.zeros(self.action_dim)
         self.previous_action = np.zeros(self.action_dim)
         self.control_manager.reset()
@@ -215,11 +262,17 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
     
     def event(self, event: str, value):
         if event == 'push':
-            self.data.qvel[:3] = value[:]
+            # Assume value is given in the robot frame (vx, vy, vz)
+            # Convert this to world-frame velocity and assign to qvel[:3]
+            raw_quat = self.data.qpos[3:7].astype(np.float64)           # [w, x, y, z]
+            R = MathUtils.quat_to_rot_matrix(raw_quat)                  # Local-to-world rotation matrix (3×3)
+            robot_vel = np.array(value, dtype=np.float64).reshape(3,)   # Velocity vector in robot frame
+            world_vel = R.dot(robot_vel)                                # Transform to world-frame velocity
+            self.data.qvel[:2] = world_vel[:2]  # xy: robot frame                        
+            self.data.qvel[2] = value[2]        #  z: world frame
         else:
             raise NotImplementedError(f"event:{event} is not supported.")
 
-    
     def close(self):
         if self.viewer is not None:
             if glfw.get_current_context() == self.viewer.window:
