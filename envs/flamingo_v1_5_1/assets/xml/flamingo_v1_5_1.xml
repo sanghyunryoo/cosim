@@ -24,7 +24,7 @@
         </default>
 
         <default class='joints'>
-            <joint damping="0.75" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
+            <joint damping="1.0" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
         </default>
         <default class='wheels'>
             <joint damping="0.0" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
@@ -137,8 +137,9 @@
         <hfield name="rocky_hard" file="../terrain/rocky_hard.png" nrow="512" ncol="512" size="140 140 0.25 0.1"/>
         <hfield name="slope_easy" file="../terrain/slope_easy.png" nrow="512" ncol="512" size="140 140 0.5 0.1"/>
         <hfield name="slope_hard" file="../terrain/slope_hard.png" nrow="512" ncol="512" size="140 140 1 0.1"/>
-        <hfield name="stairs_easy" file="../terrain/stairs_easy.png" nrow="128" ncol="8192" size="140 140 0.32 0.1"/>
-        <hfield name="stairs_hard" file="../terrain/stairs_hard.png" nrow="128" ncol="8192" size="140 140 0.64 0.1"/>
+        <hfield name="stairs_up_easy" file="../terrain/stairs_up_easy.png" nrow="512" ncol="512" size="5 5 0.60 0.5"/>
+        <hfield name="stairs_up_normal" file="../terrain/stairs_up_normal.png" nrow="512" ncol="512" size="5 5 0.7 0.5"/>
+        <hfield name="stairs_up_hard" file="../terrain/stairs_up_hard.png" nrow="512" ncol="512" size="5 5 0.825 0.5"/>
     </asset>
 
     <actuator>
@@ -148,7 +149,6 @@
         <motor joint="right_shoulder_joint" name="right_shoulder_joint" ctrllimited="true" ctrlrange="-1000 1000"  gear="1"/>
         <motor joint="left_leg_joint" name="left_leg_joint" ctrllimited="true" ctrlrange="-1000 1000"  gear="1"/>
         <motor joint="right_leg_joint" name="right_leg_joint" ctrllimited="true" ctrlrange="-1000 1000"  gear="1"/>
-
         <motor joint="left_wheel_joint" name="left_wheel_joint" ctrllimited="true" ctrlrange="-1000 1000" gear="1"/>
         <motor joint="right_wheel_joint" name="right_wheel_joint"  ctrllimited="true" ctrlrange="-1000 1000" gear="1"/>
     </actuator>

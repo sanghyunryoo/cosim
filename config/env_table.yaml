@@ -2,8 +2,14 @@
   "env":
     "observation_dim": "12"
     "action_dim": "4"
-    "command_dim": "4"
+    "command_dim": "3"
     "command_3_initial": "0.261"
+  "obs_scales":
+    "lin_vel": 1.0
+    "ang_vel": 1.0
+    "dof_pos": 1.0
+    "dof_vel": 1.0
+    "scale_commands": True
   "hardware":
     "Kp_shoulder": "50"
     "Kp_wheel": "0"
@@ -19,6 +25,12 @@
     "action_dim": "8"
     "command_dim": "4"
     "command_3_initial": "0.363"
+  "obs_scales":
+    "lin_vel": 2.0
+    "ang_vel": 0.25
+    "dof_pos": 1.0
+    "dof_vel": 0.15
+    "scale_commands": True
   "hardware":
     "Kp_hip": "100"
     "Kp_shoulder": "100"
