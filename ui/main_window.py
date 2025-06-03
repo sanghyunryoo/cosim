@@ -1,13 +1,12 @@
 import os
-import sys
 import yaml
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QPushButton, QLabel, QMessageBox, QMainWindow,
-    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication
+    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication, QCheckBox
 )
 from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt, QEvent, QUrl
-from PyQt5.QtGui import QDesktopServices, QIcon
+from PyQt5.QtGui import QDesktopServices, QIcon, QDoubleValidator, QIntValidator
 from core.tester import Tester
 
 
@@ -70,8 +69,8 @@ class MainWindow(QMainWindow):
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.3.1")
-        self.resize(950, 1000)
+        self.setWindowTitle("cosim  -  v1.4.0")
+        self.resize(1060, 900)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
 
@@ -91,7 +90,7 @@ class MainWindow(QMainWindow):
 
         # === Added: Observation Scales inputs ===
         self.obs_scales_le = {}  # dict to hold QLineEdit for obs_scales
-
+        
     def _init_default_command_values(self):
         try:
             self.current_command_values = [float(widget.text()) for widget in self.command_initial_value_le_list]
@@ -142,6 +141,12 @@ class MainWindow(QMainWindow):
         for key, le in self.obs_scales_le.items():
             if key in obs_scales:
                 le.setText(str(obs_scales[key]))
+        
+        scale_commands = obs_scales.get("scale_commands", True)
+        if scale_commands:
+            self.scale_commands_cb.setCurrentText("True")
+        else:
+            self.scale_commands_cb.setCurrentText("False")     
 
     def showEvent(self, event):
         self.centralWidget().setFocus()
@@ -265,6 +270,7 @@ class MainWindow(QMainWindow):
         top_h_layout.addLayout(right_v_layout, 1)
         self._create_command_settings_group(right_v_layout)
         self._setup_key_visual_buttons(right_v_layout)
+        self._create_event_input_group(right_v_layout)  # Added for push event
 
         self.status_label = QLabel("대기 중")
         self.status_label.setStyleSheet("font-size: 14px;")
@@ -285,6 +291,60 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(btn_layout)
 
         self._apply_styles()
+
+    # Added method for push event UI
+    def _create_event_input_group(self, parent_layout):
+        event_group = QGroupBox("Event Input")
+        event_group.setStyleSheet(
+            "QGroupBox { font-weight: bold; border: 1px solid gray; border-radius: 5px; margin-top: 10px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }"
+        )
+        event_layout = QFormLayout()
+        event_layout.setLabelAlignment(Qt.AlignRight)
+        event_layout.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        event_layout.setSpacing(8)
+        event_group.setLayout(event_layout)
+
+        push_vel_layout = QHBoxLayout()
+        self.push_vel_x_le = QLineEdit("0.0")
+        self.push_vel_x_le.setPlaceholderText("x")
+        self.push_vel_x_le.setFixedWidth(50)
+        self.push_vel_y_le = QLineEdit("0.0")
+        self.push_vel_y_le.setPlaceholderText("y")
+        self.push_vel_y_le.setFixedWidth(50)
+        self.push_vel_z_le = QLineEdit("0.0")
+        self.push_vel_z_le.setPlaceholderText("z")
+        self.push_vel_z_le.setFixedWidth(50)
+        push_vel_layout.addWidget(self.push_vel_x_le)
+        push_vel_layout.addWidget(self.push_vel_y_le)
+        push_vel_layout.addWidget(self.push_vel_z_le)
+
+        event_layout.addRow("Push Velocity (x, y, z):", push_vel_layout)
+
+        self.push_button = QPushButton("Push")
+        self.push_button.pressed.connect(self.activate_push_trigger)
+        self.push_button.released.connect(self.deactivate_push_trigger)
+        event_layout.addRow(self.push_button)
+
+        parent_layout.addWidget(event_group)
+
+    # Added method to handle push event activation
+    def activate_push_trigger(self):
+        if self.tester:
+            try:
+                push_vel = [
+                    float(self.push_vel_x_le.text()),
+                    float(self.push_vel_y_le.text()),
+                    float(self.push_vel_z_le.text())
+                ]
+                self.tester.activate_push_event(push_vel)
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input", "Push velocity must be numeric values.")
+
+    # Added method to handle push event deactivation
+    def deactivate_push_trigger(self):
+        if self.tester:
+            self.tester.deactivate_push_event()
 
     # ---------------------------------------------------------------------
     #       CONFIG GROUPS  (env, policy, obs_scales are now separate)
@@ -330,13 +390,13 @@ class MainWindow(QMainWindow):
         self.terrain_id_cb.addItems([
             'flat', 'rocky_easy', 'rocky_hard',
             'slope_easy', 'slope_hard',
-            'stairs_easy', 'stairs_hard'
+            'stairs_up_easy', 'stairs_up_normal', 'stairs_up_hard'
         ])
         self.terrain_id_cb.setCurrentText("flat")
         env_layout.addRow("Terrain:", self.terrain_id_cb)
 
-        self.max_duration_le = QLineEdit("180.0")
-        env_layout.addRow("Max Duration:", self.max_duration_le)
+        self.max_duration_le = QLineEdit("120.0")
+        env_layout.addRow("Max Duration (s):", self.max_duration_le)
         self.observation_dim_le = QLineEdit("20")
         env_layout.addRow("Observation Dim:", self.observation_dim_le)
         self.command_dim_le = QLineEdit("6")
@@ -349,15 +409,58 @@ class MainWindow(QMainWindow):
         self.action_in_state_cb.setCurrentText("True")
         env_layout.addRow("Action in State:", self.action_in_state_cb)
 
-        self.time_in_state_cb = NoWheelComboBox()
-        self.time_in_state_cb.addItems(["True", "False"])
-        self.time_in_state_cb.setCurrentText("False")
-        env_layout.addRow("Time in State:", self.time_in_state_cb)
-
         self.num_stack_cb = NoWheelComboBox()
         self.num_stack_cb.addItems([str(i) for i in range(1, 16)])
         self.num_stack_cb.setCurrentText("3")
         env_layout.addRow("Num Stack:", self.num_stack_cb)
+
+        self.external_sensors_cb = NoWheelComboBox()
+        self.external_sensors_cb.addItems(["height_map", "scaled_base_lin_vel", "All", "None"])
+        self.external_sensors_cb.setCurrentText("None")
+        env_layout.addRow("External Sensors:", self.external_sensors_cb)
+
+        self.external_sensors_Hz_cb = NoWheelComboBox()
+        self.external_sensors_Hz_cb.addItems(["10"])
+        self.external_sensors_Hz_cb.setCurrentText("10")
+        env_layout.addRow("External Sensors Hz:", self.external_sensors_Hz_cb)
+
+        self.height_size_x_le = QLineEdit()
+        self.height_size_x_le.setFixedWidth(50)
+        self.height_size_x_le.setPlaceholderText("x (m)")
+        double_validator = QDoubleValidator(0.000001, 1e6, 4)  
+        double_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.height_size_x_le.setValidator(double_validator)
+        self.height_size_x_le.setText("1.0")  
+
+        self.height_size_y_le = QLineEdit()
+        self.height_size_y_le.setFixedWidth(50)
+        self.height_size_y_le.setPlaceholderText("y (m)")
+        self.height_size_y_le.setValidator(double_validator)
+        self.height_size_y_le.setText("0.6")   
+
+        self.height_res_x_le = QLineEdit()
+        self.height_res_x_le.setFixedWidth(50)
+        self.height_res_x_le.setPlaceholderText("x_res")
+        int_validator = QIntValidator(1, 10000)  
+        self.height_res_x_le.setValidator(int_validator)
+        self.height_res_x_le.setText("15")      
+
+        self.height_res_y_le = QLineEdit()
+        self.height_res_y_le.setFixedWidth(50)
+        self.height_res_y_le.setPlaceholderText("y_res")
+        self.height_res_y_le.setValidator(int_validator)
+        self.height_res_y_le.setText("9")      
+
+        size_res_layout = QHBoxLayout()
+        size_res_layout.setSpacing(4)
+        size_res_layout.addWidget(self.height_size_x_le)
+        size_res_layout.addWidget(QLabel("×"))
+        size_res_layout.addWidget(self.height_size_y_le)
+        size_res_layout.addWidget(QLabel(" Res:"))
+        size_res_layout.addWidget(self.height_res_x_le)
+        size_res_layout.addWidget(QLabel("×"))
+        size_res_layout.addWidget(self.height_res_y_le)
+        env_layout.addRow("Height Map Size (m):", size_res_layout)
 
         parent_layout.addWidget(env_group, 1)
 
@@ -383,7 +486,7 @@ class MainWindow(QMainWindow):
         self.c_in_dim_le = QLineEdit("256")
         policy_layout.addRow("c_in Dim:", self.c_in_dim_le)
 
-        # ONNX 파일 선택 부분
+        # ONNX File
         self.policy_file_le = QLineEdit()
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self.browse_policy_file)
@@ -394,7 +497,7 @@ class MainWindow(QMainWindow):
 
         parent_layout.addWidget(policy_group, 0)
 
-    # ---- 새로 분리된 Observation Scales 그룹 ----
+    # ---- Observation Scales Group ----
     def _create_obs_scales_group(self):
         obs_group = QGroupBox("Observation Scales")
         obs_group.setStyleSheet(
@@ -402,19 +505,29 @@ class MainWindow(QMainWindow):
             "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }"
         )
         obs_form = QFormLayout()
-        obs_form.setLabelAlignment(Qt.AlignRight)
+        obs_form.setLabelAlignment(Qt.AlignLeft)
         obs_form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         obs_form.setSpacing(8)
         obs_group.setLayout(obs_form)
 
         settings = self.env_config[self.env_id_cb.currentText()]
         obs_scales = settings.get("obs_scales", {})
+
         for key in ["lin_vel", "ang_vel", "dof_pos", "dof_vel"]:
             default = obs_scales.get(key, 1.0)
             le = QLineEdit(str(default))
             le.setFixedWidth(50)
             obs_form.addRow(f"{key}:", le)
             self.obs_scales_le[key] = le
+     
+        self.scale_commands_cb = NoWheelComboBox()
+        self.scale_commands_cb.addItems(["True", "False"])
+        scale_commands = obs_scales.get("scale_commands", True)
+        if scale_commands:
+            self.scale_commands_cb.setCurrentText("True")
+        else:
+            self.scale_commands_cb.setCurrentText("False")        
+        obs_form.addRow("scale_commands:", self.scale_commands_cb)
 
         return obs_group
 
@@ -603,6 +716,12 @@ class MainWindow(QMainWindow):
             self.command_sensitivity_le_list.append(sensitivity_le)
             self.max_command_value_le_list.append(max_value_le)
             self.command_initial_value_le_list.append(init_value_widget)
+
+        self.position_command_cb = QCheckBox("Position Command")
+        self.position_command_cb.setChecked(False)
+        row_position = 6 + 1   # Add the checkbox below the 6 command rows (index 1–6 used)
+        grid_layout.addWidget(self.position_command_cb, row_position, 0, 1, 4, Qt.AlignLeft)
+        
         parent_layout.addWidget(command_group)
 
     def _setup_key_visual_buttons(self, parent_layout):
@@ -704,7 +823,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("""
             QWidget {
                 font-family: 'Segoe UI', sans-serif;
-                font-size: 13px;
+                font-size: 12px;
             }
             QLineEdit, QComboBox, QSlider {
                 padding: 4px;
@@ -741,6 +860,9 @@ class MainWindow(QMainWindow):
         self.status_label.setText("테스트 실행 중...")
         self._update_status_label()
 
+        # Disable the Position Command checkbox
+        self.position_command_cb.setEnabled(False)
+
         config = self._gather_config()
         if config is None:
             return
@@ -748,6 +870,7 @@ class MainWindow(QMainWindow):
         policy_file_path = self.policy_file_le.text().strip()
         if not policy_file_path or not os.path.isfile(policy_file_path):
             QMessageBox.critical(self, "Error", "유효한 ONNX 파일을 선택해주세요.")
+            self.position_command_cb.setEnabled(True)
             self._reset_ui_after_test()
             return
 
@@ -777,12 +900,17 @@ class MainWindow(QMainWindow):
                     "id": self.env_id_cb.currentText(),
                     "terrain": self.terrain_id_cb.currentText(),
                     "action_in_state": self.action_in_state_cb.currentText() == "True",
-                    "time_in_state": self.time_in_state_cb.currentText() == "True",
                     "max_duration": float(self.max_duration_le.text().strip()),
                     "observation_dim": int(self.observation_dim_le.text().strip()),
                     "command_dim": int(self.command_dim_le.text().strip()),
                     "action_dim": int(self.action_dim_le.text().strip()),
                     "num_stack": int(self.num_stack_cb.currentText()),
+                    "external_sensors":  self.external_sensors_cb.currentText(),
+                    "external_sensors_Hz": self.external_sensors_Hz_cb.currentText(),
+                    "height_map": {"x_size": float(self.height_size_x_le.text().strip()),
+                                   "y_size": float(self.height_size_y_le.text().strip()),
+                                   "x_res": int(self.height_res_x_le.text().strip()),
+                                   "y_res": int(self.height_res_y_le.text().strip()),}
                 },
                 "policy": {
                     "use_lstm": self.use_lstm_cb.currentText() == "True",
@@ -790,12 +918,15 @@ class MainWindow(QMainWindow):
                     "c_in_dim": int(self.c_in_dim_le.text().strip()),
                     "onnx_file": os.path.basename(self.policy_file_le.text())
                 },
-                # === Added: include obs_scales in config ===
+
                 "obs_scales": {
                     key: float(le.text())
                     for key, le in self.obs_scales_le.items()
                 },
-                
+                "command":{
+                    "position_command": self.position_command_cb.isChecked(),
+                },
+    
                 "random": {
                     "precision": self.precision_cb.currentText(),
                     "sensor_noise": self.sensor_noise_cb.currentText(),
@@ -821,7 +952,9 @@ class MainWindow(QMainWindow):
                     "wheel_max_torque": float(self.wheel_max_torque_le.text().strip())
                 }
             }
-            # load random_table
+            config["obs_scales"]["scale_commands"] =  self.scale_commands_cb.currentText() == "True"
+
+            # Load random_table
             cur_file_path = os.path.abspath(__file__)
             config_path = os.path.join(os.path.dirname(cur_file_path), "../config/random_table.yaml")
             config_path = os.path.abspath(config_path)
@@ -851,6 +984,10 @@ class MainWindow(QMainWindow):
         self.reset_command_buttons()
         self.status_label.setText("테스트 완료")
         self._reset_ui_after_test()
+
+        # Re-enable the Position Command checkbox
+        self.position_command_cb.setEnabled(True)
+
         reply = QMessageBox.question(
             self,
             "Report 확인",
@@ -880,3 +1017,4 @@ class MainWindow(QMainWindow):
         self.reset_command_buttons()
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
+        
