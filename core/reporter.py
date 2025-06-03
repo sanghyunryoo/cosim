@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('Agg')  # Ignore Warning
+matplotlib.use('Agg')  # Suppress GUI backend warning
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
@@ -8,7 +8,7 @@ import math
 import time
 from cycler import cycler
 
-# 최신 seaborn 스타일 + 노란색을 제외한 세련된 색상 팔레트 설정
+# Use seaborn whitegrid style and set a clean color palette (excluding yellow)
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams.update({
     'font.family': 'sans-serif',
@@ -24,34 +24,34 @@ plt.rcParams.update({
     'lines.linewidth': 1.5,
     'grid.linestyle': '--',
     'grid.linewidth': 0.6,
-    # 왼쪽, 오른쪽, 아래, 위 여백 (0.05씩)
+    # Subplot margins
     'figure.subplot.left': 0.1,
     'figure.subplot.right': 0.9,
     'figure.subplot.bottom': 0.05,
     'figure.subplot.top': 0.95,
     'pdf.fonttype': 42,
     'ps.fonttype': 42,
-    # 컬러 팔레트
+    # Color palette (excluding yellow)
     'axes.prop_cycle': cycler('color', [
-        '#E15759',  # 레드 톤
-        '#4E79A7',  # 파랑 톤
-        '#B07AA1',  # 보라 톤
-        '#59A14F',  # 초록 톤
-        '#9C755F'   # 브라운 톤
+        '#E15759',  # red
+        '#4E79A7',  # blue
+        '#B07AA1',  # purple
+        '#59A14F',  # green
+        '#9C755F'   # brown
     ])
 })
 
-# 기본 마커 크기 설정 (필요에 따라 값 조정)
+# Default marker size for plots
 DEFAULT_MARKER_SIZE = 1
 
 
 class Reporter:
     def __init__(self, report_path, config):
         """
-        보고서를 저장할 파일 경로와 초기 상태를 설정합니다.
+        Initializes the reporter with a PDF output path and configuration.
         Parameters:
-            report_path (str): PDF 파일로 저장할 경로.
-            config (dict): 설정 정보가 담긴 딕셔너리.
+            report_path (str): Path to save the PDF report.
+            config (dict): Dictionary containing configuration values.
         """
         self.report_path = report_path
         self.config = config
@@ -60,9 +60,9 @@ class Reporter:
 
     def write_info(self, info):
         """
-        각 타임스텝마다 호출되어 info 딕셔너리의 내용을 내부 history에 축적합니다.
+        Logs a dictionary of key-value pairs at each timestep.
         Parameters:
-            info (dict): {키: 값} 형태의 데이터. 예) {'dt': 0.1, 'action': [...], ...}
+            info (dict): Logged data such as {'dt': 0.1, 'action': [...], ...}
         """
         self.timesteps += 1
         for key, value in info.items():
@@ -72,8 +72,8 @@ class Reporter:
 
     def _build_config_rows(self, config, indent=0):
         """
-        config 딕셔너리의 구조를 유지한 채, 각 항목을 [Parameter, Value] 행으로 변환합니다.
-        하위 항목은 들여쓰기를 적용하여 표시합니다.
+        Converts a nested config dictionary into flat rows for a parameter table.
+        Applies indentation for nested keys.
         """
         rows = []
         indent_str = "    " * indent  # 들여쓰기는 공백 4칸씩
@@ -90,8 +90,8 @@ class Reporter:
 
     def generate_report(self):
         """
-        저장된 history 데이터를 기반으로 다양한 그래프와 텍스트가 포함된 PDF 보고서를 생성합니다.
-        PDF의 모든 페이지 크기는 A4 포트레이트 (8.27 x 11.69 인치)로 설정됩니다.
+        Generates a multi-page PDF report summarizing logged data and configuration.
+        The report includes plots and tables formatted for A4 portrait pages.
         """
         PAGE_SIZE = (8.27, 11.69)
         dt = float(self.history.get('dt', [1])[0])
@@ -99,7 +99,7 @@ class Reporter:
 
         with PdfPages(self.report_path) as pdf:
             # ===============================
-            # 커버 페이지
+            # Cover Page
             # ===============================
             fig_cover = plt.figure(figsize=PAGE_SIZE)
             plt.axis('off')
@@ -116,19 +116,19 @@ class Reporter:
             except FileNotFoundError:
                 print(f"Warning: Logo file not found at {logo_path}")
 
-            # 메인 타이틀 (중앙 정렬)
+            # Title
             plt.text(0.5, 0.72,
                      "Test Report",
                      ha='center', va='center',
                      fontsize=38, fontweight='bold')
 
-            # 생성 일시 (중앙 정렬)
+            # Timestamp
             plt.text(0.5, 0.63,
                      f"Report generated on: {time.strftime('%Y-%m-%d %H:%M:%S')}",
                      ha='center', va='center',
                      fontsize=14)
 
-            # 상세 설명 상단 문구 (중앙 정렬)
+            # Description
             description = ("This report provides an in-depth overview of key performance metrics,\n"
                            " encompassing the following analyses:")
             plt.text(0.5, 0.57,
@@ -136,9 +136,9 @@ class Reporter:
                      ha='center', va='center',
                      fontsize=12)
 
-            # 불릿 목록: 각 항목은 동일한 x 좌표에서 좌측 정렬 (여기서는 0.35로 지정)
+            # Bullet list
             bullet_x = 0.35
-            bullet_y_positions = [0.51, 0.47, 0.43, 0.39]  # 적절한 간격으로 y 위치 지정
+            bullet_y_positions = [0.51, 0.47, 0.43, 0.39]
             bullets = [
                 "•   Set Points vs. Actual State",
                 "•   Command vs. Actual Values",
@@ -155,7 +155,7 @@ class Reporter:
             plt.close(fig_cover)
 
             # ===============================
-            # 1. Set Points and Current State Comparison
+            # 1. Set Points vs. Actual State
             # ===============================
             if ('set_points' in self.history and 'cur_state' in self.history):
                 set_points = np.array(self.history['set_points'], dtype=float)
@@ -194,7 +194,7 @@ class Reporter:
                 plt.close(fig)
 
             # ===============================
-            # 2. Command vs. Actual Comparison
+            # 2. Command vs. Actual Values
             # ===============================
             command_keys = [
                 ("lin_vel_x_command", "lin_vel_x", "Linear Velocity X"),
@@ -220,7 +220,7 @@ class Reporter:
                     n_cols = 2
                     n_rows = math.ceil(n_plots / 2)
                 fig, axes = plt.subplots(n_rows, n_cols, figsize=PAGE_SIZE)
-                fig.suptitle("Command vs. Actual Values (Velocity-based)", fontsize=16, fontweight='bold')
+                fig.suptitle("Command vs. Actual Values", fontsize=16, fontweight='bold')
 
                 if n_rows * n_cols == 1:
                     axes = np.array([axes])
@@ -253,15 +253,14 @@ class Reporter:
                 plt.close(fig)
 
             # ===============================
-            # 3. Joint Acceleration, Torque, Action Difference (RMS)
+            # 3. Action Oscillation and Torques
             # ===============================
             if ('torque' in self.history and 'action_diff_RMS' in self.history):
                 fig, axes = plt.subplots(2, 1, figsize=PAGE_SIZE)
                 fig.suptitle("Action Difference (Oscillation) and Torques", fontsize=16, fontweight='bold')
 
                 diffs = np.array(self.history['action_diff_RMS'], dtype=float)
-                # 액션 차이 그래프 색상 (노랑계열 제외)
-                axes[0].plot(times, diffs, marker='s', linestyle='-', color="#E15759",  # 붉은 톤
+                axes[0].plot(times, diffs, marker='s', linestyle='-', color="#E15759", 
                              markersize=DEFAULT_MARKER_SIZE, label="Δa (RMS)")
                 axes[0].set_xlabel("Time (s)", fontsize=10)
                 axes[0].set_ylabel("Action Difference:= Δa (RMS)", fontsize=10)
@@ -289,7 +288,7 @@ class Reporter:
                 plt.close(fig)
 
             # ===============================
-            # 마지막 페이지들: Configuration 테이블
+            # Final Section: Configuration Table
             # ===============================
             filtered_config = {k: v for k, v in self.config.items() if k in ["env", "policy", "random", "hardware", "obs_scales"]}
             table_data = self._build_config_rows(filtered_config)
@@ -323,10 +322,9 @@ class Reporter:
                     else:
                         cell.set_facecolor("#f1f1f2")
 
-                        # "Parameter" 컬럼(보통 col == 0)에서 텍스트를 확인
                         if col == 0:
                             text_str = cell.get_text().get_text().strip()
-                            # env, policy, random, hardware, obs_scales라면 굵게
+                            #  Bold key group headers (e.g., env, policy) for readability
                             if text_str in ["env", "policy", "random", "hardware", "obs_scales"]:
                                 cell.set_text_props(fontweight='bold')
 

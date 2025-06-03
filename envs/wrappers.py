@@ -1,6 +1,7 @@
-import numpy as np
+import warnings
 from abc import ABC, abstractmethod
 from typing import (Tuple, SupportsFloat)
+import numpy as np
 
 
 class BaseEnv(ABC):
@@ -56,6 +57,10 @@ class BaseEnv(ABC):
         :param value: Associated value to be passed with the event (e.g., velocity vector).
         """
         pass
+
+    def get_data(self):
+        """Retrieve low-level environment data from the wrapped environment."""
+        return self.env.get_data()
 
     @abstractmethod
     def render(self):
@@ -113,6 +118,9 @@ class TimeLimitWrapper(BaseEnv):
     def event(self, event: str, value):
         return self.env.event(event, value)
 
+    def get_data(self):
+        return self.env.get_data()
+
     def render(self):
         self.env.render()
 
@@ -149,6 +157,9 @@ class ActionInStateWrapper(BaseEnv):
     
     def event(self, event: str, value):
         return self.env.event(event, value)
+
+    def get_data(self):
+        return self.env.get_data()
 
     def render(self):
         self.env.render()
@@ -195,12 +206,14 @@ class StateStackWrapper(BaseEnv):
     def event(self, event: str, value):
         return self.env.event(event, value)
 
+    def get_data(self):
+        return self.env.get_data()
+
     def render(self):
         self.env.render()
 
     def close(self):
         self.env.close()
-
 
 
 class ExternalObsWrapper(BaseEnv):
@@ -264,6 +277,9 @@ class ExternalObsWrapper(BaseEnv):
 
     def event(self, event: str, value):
         return self.env.event(event, value)
+    
+    def get_data(self):
+        return self.env.get_data()
 
     def render(self):
         self.env.render()
@@ -282,24 +298,47 @@ class CommandWrapper(BaseEnv):
         self.action_dim = env.action_dim
         self.command_dim = config["env"]["command_dim"]
         self.user_command = np.zeros(config["env"]["command_dim"])
-        self.scaled_command = np.zeros(config["env"]["command_dim"])
+        self.applied_command = np.zeros(config["env"]["command_dim"])
         self.reset_flag = False       
         assert self.command_dim > 0, "command_dim must be greater than 0."
 
     def receive_user_command(self, user_command):
         self.user_command = user_command[:self.command_dim]
-        self.scaled_command[:] = user_command
-        if self.config["obs_scales"]["scale_commands"]:
-            if self.id == "flamingo_light_proto_v1":
-                self.scaled_command[0] *= self.config["obs_scales"]["lin_vel"]
-                self.scaled_command[1] *= self.config["obs_scales"]["ang_vel"]
-            elif self.id == "flamingo_v1_5_1":
-                self.scaled_command[0] *= self.config["obs_scales"]["lin_vel"]
-                self.scaled_command[1] *= self.config["obs_scales"]["lin_vel"]
-                if len(self.user_command) > 2:
-                    self.scaled_command[2] *= self.config["obs_scales"]["ang_vel"]
-            else:
-                raise NotImplementedError(f"Feeding commands to robot: '{self.id}' is not supported.")
+        self.applied_command[:] = user_command
+
+        if self.config["command"]["position_command"] is False:
+            if self.config["obs_scales"]["scale_commands"]:
+                if self.id == "flamingo_light_proto_v1":
+                    self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
+                    self.applied_command[1] *= self.config["obs_scales"]["ang_vel"]
+                elif self.id == "flamingo_v1_5_1":
+                    self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
+                    self.applied_command[1] *= self.config["obs_scales"]["lin_vel"]
+                    if len(self.user_command) > 2:
+                        self.applied_command[2] *= self.config["obs_scales"]["ang_vel"]
+                else:
+                    raise NotImplementedError(f"Feeding commands to robot: '{self.id}' is not supported.")          
+        else:
+            assert self.command_dim == 2, "currently, position command only support 2 dim."
+            if self.config["obs_scales"]["scale_commands"]:
+                warnings.warn("For position commands, 'scale_commands' is ignored and always treated as False.")
+
+            data = self.get_data()
+            robot_px, robot_py = data.qpos[0], data.qpos[1] #
+            target_x, target_y = self.user_command[0], self.user_command[1]
+
+            delta_world_x = target_x - robot_px
+            delta_world_y = target_y - robot_py
+
+            w, x, y, z = data.qpos[3:7].astype(np.float64)
+            yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+            cosy, siny = np.cos(-yaw), np.sin(-yaw)
+
+            robot_x = cosy * delta_world_x - siny * delta_world_y
+            robot_y = siny * delta_world_x + cosy * delta_world_y
+
+            self.applied_command[0] = robot_x
+            self.applied_command[1] = robot_y
 
     def reset(self):
         self.reset_flag = True
@@ -310,7 +349,7 @@ class CommandWrapper(BaseEnv):
     def step(self, action: np.ndarray):
         assert self.reset_flag is True, "Call `reset()` before calling `step()`."
         next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, self.scaled_command))
+        next_state = np.concatenate((next_state, self.applied_command))
 
         if self.id == "flamingo_light_proto_v1":
             info["lin_vel_x_command"] = self.user_command[0]
@@ -336,6 +375,9 @@ class CommandWrapper(BaseEnv):
 
     def event(self, event: str, value):
         return self.env.event(event, value)
+    
+    def get_data(self):
+        return self.env.get_data()
 
     def render(self):
         self.env.render()

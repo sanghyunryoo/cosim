@@ -273,6 +273,9 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         else:
             raise NotImplementedError(f"event:{event} is not supported.")
 
+    def get_data(self):
+        return self.data
+
     def close(self):
         if self.viewer is not None:
             if glfw.get_current_context() == self.viewer.window:

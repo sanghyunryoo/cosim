@@ -1,10 +1,9 @@
 import os
-import sys
 import yaml
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QPushButton, QLabel, QMessageBox, QMainWindow,
-    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication
+    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication, QCheckBox
 )
 from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt, QEvent, QUrl
 from PyQt5.QtGui import QDesktopServices, QIcon, QDoubleValidator, QIntValidator
@@ -71,7 +70,7 @@ class MainWindow(QMainWindow):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
         self.setWindowIcon(QIcon(app_logo_path))
         self.setWindowTitle("cosim  -  v1.4.0")
-        self.resize(1080, 900)
+        self.resize(1060, 900)
         # 기본적으로 메인 윈도우에 이벤트 필터를 설치
         self.installEventFilter(self)
 
@@ -717,6 +716,12 @@ class MainWindow(QMainWindow):
             self.command_sensitivity_le_list.append(sensitivity_le)
             self.max_command_value_le_list.append(max_value_le)
             self.command_initial_value_le_list.append(init_value_widget)
+
+        self.position_command_cb = QCheckBox("Position Command")
+        self.position_command_cb.setChecked(False)
+        row_position = 6 + 1   # Add the checkbox below the 6 command rows (index 1–6 used)
+        grid_layout.addWidget(self.position_command_cb, row_position, 0, 1, 4, Qt.AlignLeft)
+        
         parent_layout.addWidget(command_group)
 
     def _setup_key_visual_buttons(self, parent_layout):
@@ -818,7 +823,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("""
             QWidget {
                 font-family: 'Segoe UI', sans-serif;
-                font-size: 13px;
+                font-size: 12px;
             }
             QLineEdit, QComboBox, QSlider {
                 padding: 4px;
@@ -855,6 +860,9 @@ class MainWindow(QMainWindow):
         self.status_label.setText("테스트 실행 중...")
         self._update_status_label()
 
+        # Disable the Position Command checkbox
+        self.position_command_cb.setEnabled(False)
+
         config = self._gather_config()
         if config is None:
             return
@@ -862,6 +870,7 @@ class MainWindow(QMainWindow):
         policy_file_path = self.policy_file_le.text().strip()
         if not policy_file_path or not os.path.isfile(policy_file_path):
             QMessageBox.critical(self, "Error", "유효한 ONNX 파일을 선택해주세요.")
+            self.position_command_cb.setEnabled(True)
             self._reset_ui_after_test()
             return
 
@@ -914,7 +923,10 @@ class MainWindow(QMainWindow):
                     key: float(le.text())
                     for key, le in self.obs_scales_le.items()
                 },
-                
+                "command":{
+                    "position_command": self.position_command_cb.isChecked(),
+                },
+    
                 "random": {
                     "precision": self.precision_cb.currentText(),
                     "sensor_noise": self.sensor_noise_cb.currentText(),
@@ -942,7 +954,7 @@ class MainWindow(QMainWindow):
             }
             config["obs_scales"]["scale_commands"] =  self.scale_commands_cb.currentText() == "True"
 
-            # load random_table
+            # Load random_table
             cur_file_path = os.path.abspath(__file__)
             config_path = os.path.join(os.path.dirname(cur_file_path), "../config/random_table.yaml")
             config_path = os.path.abspath(config_path)
@@ -972,6 +984,10 @@ class MainWindow(QMainWindow):
         self.reset_command_buttons()
         self.status_label.setText("테스트 완료")
         self._reset_ui_after_test()
+
+        # Re-enable the Position Command checkbox
+        self.position_command_cb.setEnabled(True)
+
         reply = QMessageBox.question(
             self,
             "Report 확인",
