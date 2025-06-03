@@ -391,7 +391,7 @@ class MainWindow(QMainWindow):
         self.terrain_id_cb.addItems([
             'flat', 'rocky_easy', 'rocky_hard',
             'slope_easy', 'slope_hard',
-            'stairs_easy', 'stairs_hard'
+            'stairs_up_easy', 'stairs_up_normal', 'stairs_up_hard'
         ])
         self.terrain_id_cb.setCurrentText("flat")
         env_layout.addRow("Terrain:", self.terrain_id_cb)
