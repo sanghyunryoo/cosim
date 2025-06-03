@@ -43,6 +43,16 @@ random_table:
         std: 0.0000001
         lower: -0.00000001
         upper: 0.00000001
+      base_lin_vel:
+        mean: 0.0
+        std: 0.0000001
+        lower: -0.00000001
+        upper: 0.00000001
+      height_map:
+        mean: 0.0
+        std: 0.0000001
+        lower: -0.00000001
+        upper: 0.00000001
     low:
       q:
         mean: 0.0
@@ -64,6 +74,16 @@ random_table:
         std: 0.001
         lower: -0.005
         upper: 0.005
+      base_lin_vel:
+        mean: 0.0
+        std: 0.01
+        lower: -0.02
+        upper: 0.02
+      height_map:
+        mean: 0.0
+        std: 0.01
+        lower: -0.02
+        upper: 0.02
     medium:
       q:
         mean: 0.0
@@ -85,6 +105,16 @@ random_table:
         std: 0.0025
         lower: -0.01
         upper: 0.01
+      base_lin_vel:
+        mean: 0.0
+        std: 0.015
+        lower: -0.03
+        upper: 0.03
+      height_map:
+        mean: 0.0
+        std: 0.015
+        lower: -0.03
+        upper: 0.03
     high:
       q:
         mean: 0.0
@@ -106,6 +136,16 @@ random_table:
         std: 0.01
         lower: -0.02
         upper: 0.02
+      base_lin_vel:
+        mean: 0.0
+        std: 0.03
+        lower: -0.06
+        upper: 0.06
+      height_map:
+        mean: 0.0
+        std: 0.025
+        lower: -0.05
+        upper: 0.05
     ultra:
       q:
         mean: 0.0
@@ -127,6 +167,16 @@ random_table:
         std: 0.02
         lower: -0.04
         upper: 0.04
+      base_lin_vel:
+        mean: 0.0
+        std: 0.06
+        lower: -0.12
+        upper: 0.12
+      height_map:
+        mean: 0.0
+        std: 0.04
+        lower: -0.08
+        upper: 0.08
     extreme:
       q:
         mean: 0.0
@@ -148,3 +198,13 @@ random_table:
         std: 0.04
         lower: -0.08
         upper: 0.08
+      base_lin_vel:
+        mean: 0.0
+        std: 0.12
+        lower: -0.24
+        upper: 0.24
+      height_map:
+        mean: 0.0
+        std: 0.05
+        lower: -0.1
+        upper: 0.1

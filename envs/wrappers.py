@@ -1,7 +1,7 @@
-import numpy as np
-from collections import deque
+import warnings
 from abc import ABC, abstractmethod
 from typing import (Tuple, SupportsFloat)
+import numpy as np
 
 
 class BaseEnv(ABC):
@@ -47,6 +47,20 @@ class BaseEnv(ABC):
               include diagnostic data or auxiliary variables.
         """
         pass
+
+    @abstractmethod
+    def event(self, event: str, value):
+        """
+        Triggers an event.
+
+        :param event: Name of the event (e.g., "push").
+        :param value: Associated value to be passed with the event (e.g., velocity vector).
+        """
+        pass
+
+    def get_data(self):
+        """Retrieve low-level environment data from the wrapped environment."""
+        return self.env.get_data()
 
     @abstractmethod
     def render(self):
@@ -100,6 +114,12 @@ class TimeLimitWrapper(BaseEnv):
             self.reset_flag = False
 
         return next_state, terminated, truncated, info
+    
+    def event(self, event: str, value):
+        return self.env.event(event, value)
+
+    def get_data(self):
+        return self.env.get_data()
 
     def render(self):
         self.env.render()
@@ -134,6 +154,12 @@ class ActionInStateWrapper(BaseEnv):
             self.reset_flag = False
 
         return next_state, terminated, truncated, info
+    
+    def event(self, event: str, value):
+        return self.env.event(event, value)
+
+    def get_data(self):
+        return self.env.get_data()
 
     def render(self):
         self.env.render()
@@ -177,6 +203,12 @@ class StateStackWrapper(BaseEnv):
 
         return next_state, terminated, truncated, info
 
+    def event(self, event: str, value):
+        return self.env.event(event, value)
+
+    def get_data(self):
+        return self.env.get_data()
+
     def render(self):
         self.env.render()
 
@@ -184,36 +216,70 @@ class StateStackWrapper(BaseEnv):
         self.env.close()
 
 
-class TimeInStateWrapper(BaseEnv):
+class ExternalObsWrapper(BaseEnv):
     def __init__(self, env, config):
         super().__init__()
         self.env = env
         self.config = config
         self.id = env.id
-        self.state_dim = env.state_dim + 1
+        self.external_sensors = self.config["env"]["external_sensors"] 
+        if self.external_sensors == "height_map":
+            height_map_dim = self.config["env"]["height_map"]["x_res"] * self.config["env"]["height_map"]["y_res"]
+            self.state_dim = env.state_dim + height_map_dim 
+        elif self.external_sensors == "scaled_base_lin_vel":
+            self.state_dim = env.state_dim + 3
+        elif self.external_sensors == "All":
+            height_map_dim = self.config["env"]["height_map"]["x_res"] * self.config["env"]["height_map"]["y_res"]         
+            self.state_dim = env.state_dim + (height_map_dim + 3)  # combine height_map and scaled_base_lin_vel
+        elif self.external_sensors == "None":
+            raise NotImplementedError(f"You must specify at least one external_sensors option when wrapping ExternalObsWrapper.")
+        else:
+            raise NotImplementedError(f"external_sensors option '{self.external_sensors}' is not supported.")
+        
         self.action_dim = env.action_dim
-        self.tick = 0.02  # 50Hz
-        self.time = 0
-        self.reset_flag = False
+        self.reset_flag = False     
 
     def reset(self):
         self.reset_flag = True
-        self.time = 0
         init_state, info = self.env.reset()
-        init_state = np.concatenate((init_state, np.zeros(1)))
 
+        if self.external_sensors == "height_map":
+            external_obs = info["height_map"]
+        elif self.external_sensors == "scaled_base_lin_vel":
+            external_obs = info["scaled_base_lin_vel"]
+        elif self.external_sensors == "All":
+            external_obs = np.concatenate((info["scaled_base_lin_vel"], info["height_map"]))  # scaled_base_lin_vel first
+        else:
+            raise NotImplementedError(f"external_sensors option '{self.external_sensors}' is not supported.")
+
+        init_state = np.concatenate((init_state, external_obs))
         return init_state, info
 
     def step(self, action: np.ndarray):
         assert self.reset_flag is True, "Call `reset()` before calling `step()`."
-        self.time += self.tick
         next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, np.array([self.time])))
+
+        if self.external_sensors == "height_map":
+            external_obs = info["height_map"]
+        elif self.external_sensors == "scaled_base_lin_vel":
+            external_obs = info["scaled_base_lin_vel"]
+        elif self.external_sensors == "All":
+            external_obs = np.concatenate((info["scaled_base_lin_vel"], info["height_map"]))  # scaled_base_lin_vel first
+        else:
+            raise NotImplementedError(f"external_sensors '{self.external_sensors}' are not supported.")
+
+        next_state = np.concatenate((next_state, external_obs))
 
         if terminated or truncated:
             self.reset_flag = False
 
         return next_state, terminated, truncated, info
+
+    def event(self, event: str, value):
+        return self.env.event(event, value)
+    
+    def get_data(self):
+        return self.env.get_data()
 
     def render(self):
         self.env.render()
@@ -228,52 +294,95 @@ class CommandWrapper(BaseEnv):
         self.env = env
         self.config = config
         self.id = env.id
-        self.state_dim = env.state_dim * config["env"]["command_dim"]
+        self.state_dim = env.state_dim + config["env"]["command_dim"]
         self.action_dim = env.action_dim
         self.command_dim = config["env"]["command_dim"]
         self.user_command = np.zeros(config["env"]["command_dim"])
-        self.scaled_command = np.zeros(config["env"]["command_dim"])
-        self.reset_flag = False
-        assert self.command_dim >= 3, "command_dim must be greater than 2."
+        self.applied_command = np.zeros(config["env"]["command_dim"])
+        self.reset_flag = False       
+        assert self.command_dim > 0, "command_dim must be greater than 0."
 
     def receive_user_command(self, user_command):
         self.user_command = user_command[:self.command_dim]
-        self.scaled_command[:] = user_command
-        self.scaled_command[0] *= self.config["obs_scales"]["lin_vel"]
-        self.scaled_command[1] *= self.config["obs_scales"]["lin_vel"]
-        self.scaled_command[2] *= self.config["obs_scales"]["ang_vel"]
+        self.applied_command[:] = user_command
+
+        if self.config["command"]["position_command"] is False:
+            if self.config["obs_scales"]["scale_commands"]:
+                if self.id == "flamingo_light_proto_v1":
+                    self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
+                    self.applied_command[1] *= self.config["obs_scales"]["ang_vel"]
+                elif self.id == "flamingo_v1_5_1":
+                    self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
+                    self.applied_command[1] *= self.config["obs_scales"]["lin_vel"]
+                    if len(self.user_command) > 2:
+                        self.applied_command[2] *= self.config["obs_scales"]["ang_vel"]
+                else:
+                    raise NotImplementedError(f"Feeding commands to robot: '{self.id}' is not supported.")          
+        else:
+            assert self.command_dim == 2, "currently, position command only support 2 dim."
+            if self.config["obs_scales"]["scale_commands"]:
+                warnings.warn("For position commands, 'scale_commands' is ignored and always treated as False.")
+
+            data = self.get_data()
+            robot_px, robot_py = data.qpos[0], data.qpos[1] #
+            target_x, target_y = self.user_command[0], self.user_command[1]
+
+            delta_world_x = target_x - robot_px
+            delta_world_y = target_y - robot_py
+
+            w, x, y, z = data.qpos[3:7].astype(np.float64)
+            yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+            cosy, siny = np.cos(-yaw), np.sin(-yaw)
+
+            robot_x = cosy * delta_world_x - siny * delta_world_y
+            robot_y = siny * delta_world_x + cosy * delta_world_y
+
+            self.applied_command[0] = robot_x
+            self.applied_command[1] = robot_y
 
     def reset(self):
         self.reset_flag = True
         init_state, info = self.env.reset()
         init_state = np.concatenate((init_state, np.zeros(self.config["env"]["command_dim"])))
-
         return init_state, info
 
     def step(self, action: np.ndarray):
         assert self.reset_flag is True, "Call `reset()` before calling `step()`."
-
         next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, self.scaled_command))
+        next_state = np.concatenate((next_state, self.applied_command))
 
-        info["lin_vel_x_command"] = self.user_command[0]
-        info["lin_vel_y_command"] = self.user_command[1]
-        info["ang_vel_z_command"] = self.user_command[2]
-        if len(self.user_command) > 3:
-            info["pos_z_command"] = self.user_command[3]
-        if len(self.user_command) > 4:
-            info["ang_roll_command"] = self.user_command[4]
-        if len(self.user_command) > 5:
-            info["ang_pitch_command"] = self.user_command[5]
+        if self.id == "flamingo_light_proto_v1":
+            info["lin_vel_x_command"] = self.user_command[0]
+            info["ang_vel_z_command"] = self.user_command[1]
+        elif self.id == "flamingo_v1_5_1":
+            info["lin_vel_x_command"] = self.user_command[0]
+            info["lin_vel_y_command"] = self.user_command[1]
+            if len(self.user_command) > 2:
+                info["ang_vel_z_command"] = self.user_command[2]
+            if len(self.user_command) > 3:
+                info["pos_z_command"] = self.user_command[3]
+            if len(self.user_command) > 4:
+                info["ang_roll_command"] = self.user_command[4]
+            if len(self.user_command) > 5:
+                info["ang_pitch_command"] = self.user_command[5]
+        else:
+            raise NameError("Choose the correct robot id.")
 
         if terminated or truncated:
             self.reset_flag = False
 
         return next_state, terminated, truncated, info
 
+    def event(self, event: str, value):
+        return self.env.event(event, value)
+    
+    def get_data(self):
+        return self.env.get_data()
+
     def render(self):
         self.env.render()
 
     def close(self):
         self.env.close()
+
 

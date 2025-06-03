@@ -42,3 +42,13 @@ class MathUtils:
         r = R.from_quat(quat)
         v = r.apply(qvel, inverse=True).astype(np.double)  # In the base frame
         return v
+    
+    @staticmethod
+    def quat_to_rot_matrix(quat):
+        """쿼터니언을 회전 행렬로 변환하는 유틸리티 함수"""
+        w, x, y, z = quat
+        return np.array([
+            [1 - 2*y**2 - 2*z**2, 2*x*y - 2*z*w, 2*x*z + 2*y*w],
+            [2*x*y + 2*z*w, 1 - 2*x**2 - 2*z**2, 2*y*z - 2*x*w],
+            [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x**2 - 2*y**2]
+        ])
