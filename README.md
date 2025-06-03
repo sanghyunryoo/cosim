@@ -1,5 +1,13 @@
-# cosim
-**Sim-to-Sim Framework Using MuJoCo**
+<div align="center">
+  <h1>cosim</h1>
+<p align="center">
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Badge">
+  <img src="https://img.shields.io/badge/MuJoCo-3.2.7-FF6F00?style=for-the-badge&logo=openai&logoColor=white" alt="MuJoCo Badge">
+  <img src="https://img.shields.io/badge/PyQt5-5.15.11-41CD52?style=for-the-badge&logo=qt&logoColor=white" alt="PyQt5 Badge">
+</p>
+</p>
+</div>
 
 ## Overview
 <p align="center">
