@@ -77,6 +77,37 @@ class XMLManager:
                     if 'frictionloss' in joint.attrib:
                         joint.attrib['frictionloss'] = str(self.config["random"]["friction_loss"])
 
+
+        # 7. Initialize spheres for height map
+        if self.config["env"]["external_sensors"] != "None" and self.config["env"]["external_sensors"] in ['height_map', 'All']:
+            x_res = self.config["env"]["height_map"]["x_res"]
+            y_res = self.config["env"]["height_map"]["y_res"]
+
+            # Find <worldbody> and then <body name="base_link">
+            worldbody = root.find('worldbody')
+            base_link = None
+            for body in worldbody.findall('body'):
+                if body.get('name') == 'base_link':
+                    base_link = body
+                    break
+
+            if base_link is None:
+                raise ValueError("Could not find <body name='base_link'> in the XML file.")
+
+            # Add <site> elements
+            for i in range(y_res):
+                for j in range(x_res):
+                    site_name = f"heightmap_site_{i}_{j}"
+                    site_element = ET.Element('site', {
+                        'name': site_name,
+                        'type': 'sphere',
+                        'size': '0.0000001',
+                        'pos': '0 0 -1',
+                        'rgba': '0 1 0 0.0000001',
+                        'group': '0',   
+                    })
+                    base_link.append(site_element)
+
         randomized_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'applied_flamingo_light_proto_v1.xml')
         tree.write(randomized_model_path)
         return randomized_model_path
