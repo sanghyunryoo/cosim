@@ -175,7 +175,8 @@ class MuJoCoUtils:
                     heightmap[i, j] = robot_pos[2] - terrain_height
                 else:
                     # No intersection → fallback value + warning
-                    heightmap[i, j] = z_min_world
+                    terrain_height = z_min_world
+                    heightmap[i, j] = robot_pos[2] - z_min_world
                     warnings.warn("No intersection with heightfield!")
 
                 # Update visualization site to the terrain contact point
