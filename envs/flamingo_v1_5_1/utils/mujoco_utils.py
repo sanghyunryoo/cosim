@@ -31,15 +31,14 @@ class MuJoCoUtils:
 
     def get_qpos_joint_indices_by_name(self, joint_names):
         """
-        Get the indices of qpos and qvel for given joint names.
+        Get the qpos indices for the given joint names.
 
         Args:
             model: MuJoCo mjModel instance.
-            joint_names: List of joint names to fetch indices for.
+            joint_names: List of joint names to look up.
 
         Returns:
-            qpos_indices: List of qpos indices corresponding to joint names.
-            qvel_indices: List of qvel indices corresponding to joint names.
+            qpos_indices: List of qpos indices corresponding to the given joints.
         """
         qpos_indices = []
         for joint_name in joint_names:
@@ -52,15 +51,14 @@ class MuJoCoUtils:
 
     def get_qvel_joint_indices_by_name(self, joint_names):
         """
-        Get the indices of qpos and qvel for given joint names.
+        Get the qvel indices for the given joint names.
 
         Args:
             model: MuJoCo mjModel instance.
-            joint_names: List of joint names to fetch indices for.
+            joint_names: List of joint names to look up.
 
         Returns:
-            qpos_indices: List of qpos indices corresponding to joint names.
-            qvel_indices: List of qvel indices corresponding to joint names.
+            qvel_indices: List of qvel indices corresponding to the given joints.
         """
         qvel_indices = []
         for joint_name in joint_names:

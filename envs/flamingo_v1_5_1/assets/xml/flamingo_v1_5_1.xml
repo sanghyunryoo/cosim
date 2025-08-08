@@ -1,8 +1,7 @@
 <mujoco model="flamingo_v1_5_1">
     <compiler angle="radian" />
     <option timestep="0.005" gravity="0 0 -9.807" iterations="50" solver="Newton" jacobian="dense" integrator="implicitfast"/>
-    <!-- <option timestep="0.005" gravity="0 0 -9.81" iterations="50" tolerance="1e-10" solver="Newton" jacobian="dense" cone="pyramidal"/> -->
-
+ 
     <visual>
         <headlight diffuse="1 1 1" ambient="0.3 0.3 0.3" specular="0 0 0"/>
         <rgba haze="0.15 0.25 0.35 1"/>

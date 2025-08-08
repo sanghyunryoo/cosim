@@ -58,6 +58,7 @@ class BaseEnv(ABC):
         """
         pass
 
+    @abstractmethod
     def get_data(self):
         """Retrieve low-level environment data from the wrapped environment."""
         return self.env.get_data()
@@ -226,11 +227,11 @@ class ExternalObsWrapper(BaseEnv):
         if self.external_sensors == "height_map":
             height_map_dim = self.config["env"]["height_map"]["x_res"] * self.config["env"]["height_map"]["y_res"]
             self.state_dim = env.state_dim + height_map_dim 
-        elif self.external_sensors == "scaled_base_lin_vel":
+        elif self.external_sensors == "base_lin_vel":
             self.state_dim = env.state_dim + 3
         elif self.external_sensors == "All":
             height_map_dim = self.config["env"]["height_map"]["x_res"] * self.config["env"]["height_map"]["y_res"]         
-            self.state_dim = env.state_dim + (height_map_dim + 3)  # combine height_map and scaled_base_lin_vel
+            self.state_dim = env.state_dim + (height_map_dim + 3)  # combine height_map and base_lin_vel
         elif self.external_sensors == "None":
             raise NotImplementedError(f"You must specify at least one external_sensors option when wrapping ExternalObsWrapper.")
         else:
@@ -245,7 +246,7 @@ class ExternalObsWrapper(BaseEnv):
 
         if self.external_sensors == "height_map":
             external_obs = info["height_map"]
-        elif self.external_sensors == "scaled_base_lin_vel":
+        elif self.external_sensors == "base_lin_vel":
             external_obs = info["scaled_base_lin_vel"]
         elif self.external_sensors == "All":
             external_obs = np.concatenate((info["scaled_base_lin_vel"], info["height_map"]))  # scaled_base_lin_vel first
@@ -261,7 +262,7 @@ class ExternalObsWrapper(BaseEnv):
 
         if self.external_sensors == "height_map":
             external_obs = info["height_map"]
-        elif self.external_sensors == "scaled_base_lin_vel":
+        elif self.external_sensors == "base_lin_vel":
             external_obs = info["scaled_base_lin_vel"]
         elif self.external_sensors == "All":
             external_obs = np.concatenate((info["scaled_base_lin_vel"], info["height_map"]))  # scaled_base_lin_vel first
@@ -308,10 +309,10 @@ class CommandWrapper(BaseEnv):
 
         if self.config["command"]["position_command"] is False:
             if self.config["obs_scales"]["scale_commands"]:
-                if self.id == "flamingo_light_proto_v1":
+                if self.id in ["flamingo_light_proto_v1"]:
                     self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
                     self.applied_command[1] *= self.config["obs_scales"]["ang_vel"]
-                elif self.id == "flamingo_v1_5_1":
+                elif self.id in ["flamingo_v1_5_1", 'gaia_v1']:
                     self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
                     self.applied_command[1] *= self.config["obs_scales"]["lin_vel"]
                     if len(self.user_command) > 2:
@@ -351,10 +352,10 @@ class CommandWrapper(BaseEnv):
         next_state, terminated, truncated, info = self.env.step(action)
         next_state = np.concatenate((next_state, self.applied_command))
 
-        if self.id == "flamingo_light_proto_v1":
+        if self.id in ["flamingo_light_proto_v1"]:
             info["lin_vel_x_command"] = self.user_command[0]
             info["ang_vel_z_command"] = self.user_command[1]
-        elif self.id == "flamingo_v1_5_1":
+        elif self.id in ["flamingo_v1_5_1", "gaia_v1"]:
             info["lin_vel_x_command"] = self.user_command[0]
             info["lin_vel_y_command"] = self.user_command[1]
             if len(self.user_command) > 2:

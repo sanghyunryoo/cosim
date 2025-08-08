@@ -31,7 +31,6 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.kp_hip = config["hardware"]["Kp_hip"]
         self.kp_shoulder = config["hardware"]["Kp_shoulder"]
         self.kp_leg = config["hardware"]["Kp_leg"]
-        self.kp_wheel = config["hardware"]["Kp_wheel"]
 
         self.kd_hip = config["hardware"]["Kd_hip"]
         self.kd_shoulder = config["hardware"]["Kd_shoulder"]
@@ -54,7 +53,6 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.action = np.zeros(self.action_dim)
         self.filtered_action = np.zeros(self.action_dim)
         self.previous_action = np.zeros(self.action_dim)
-        self.computed_torques = np.zeros(self.action_dim)
         self.applied_torques = np.zeros(self.action_dim)
         self.obs = None
         self.scaled_obs = None
@@ -95,7 +93,7 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         qvel_joint_names = ["left_hip_joint", "right_hip_joint", "left_shoulder_joint", "right_shoulder_joint", "left_leg_joint", "right_leg_joint", "left_wheel_joint", "right_wheel_joint"]
         self.q_indices = self.mujoco_utils.get_qpos_joint_indices_by_name(qpos_joint_names)
         self.qd_indices = self.mujoco_utils.get_qvel_joint_indices_by_name(qvel_joint_names)
-
+        
     def _get_obs(self):
         q = self.data.qpos[self.q_indices]
         qd = self.data.qvel[self.qd_indices]
@@ -135,7 +133,7 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         else:
             height_map = None
 
-        tick = int(self.control_freq / self.external_obs_freq)
+        tick = max(1, int(self.control_freq / self.external_obs_freq))
         if self.local_step % tick == 0:     
             self.external_obs["scaled_base_lin_vel"] = scaled_base_lin_vel
             self.external_obs["height_map"] = height_map
@@ -154,7 +152,6 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         pos_hip = q[0:2]
         pos_shoulder = q[2:4]
         pos_leg = q[4:6]
-        pos_wheel = self.data.qpos[[10, 14]]
 
         vel_hip = qd[0:2]
         vel_shoulder = qd[2:4]
@@ -166,19 +163,17 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         leg_action_scaled = self.filtered_action[4:6] * self.action_scaler[4:6]
         wheel_action_scaled = self.filtered_action[6:8] * self.action_scaler[6:8]
 
-        hip_action = self.control_manager.pd_controller(self.kp_hip, hip_action_scaled, pos_hip, self.kd_hip, 0.0, vel_hip)
-        shoulder_action = self.control_manager.pd_controller(self.kp_shoulder, shoulder_action_scaled, pos_shoulder, self.kd_shoulder, 0.0, vel_shoulder)
-        leg_action = self.control_manager.pd_controller(self.kp_leg, leg_action_scaled, pos_leg, self.kd_leg, 0.0, vel_leg)
-        wheel_action = self.control_manager.pd_controller(self.kp_wheel, 0.0, pos_wheel, self.kd_wheel, wheel_action_scaled, vel_wheel)
+        hip_torques = self.control_manager.pd_controller(self.kp_hip, hip_action_scaled, pos_hip, self.kd_hip, 0.0, vel_hip)
+        shoulder_torques = self.control_manager.pd_controller(self.kp_shoulder, shoulder_action_scaled, pos_shoulder, self.kd_shoulder, 0.0, vel_shoulder)
+        leg_torques = self.control_manager.pd_controller(self.kp_leg, leg_action_scaled, pos_leg, self.kd_leg, 0.0, vel_leg)
+        wheel_torques = self.control_manager.pd_controller(0.0, 0.0, 0.0, self.kd_wheel, wheel_action_scaled, vel_wheel)
 
-        self.computed_torques = np.concatenate([hip_action, shoulder_action, leg_action, wheel_action])
+        hip_torques_clipped = np.clip(hip_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
+        shoulder_torques_clipped = np.clip(shoulder_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
+        leg_torques_clipped = np.clip(leg_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
+        wheel_torques_clipped = np.clip(wheel_torques, -self.config['hardware']['wheel_max_torque'], self.config['hardware']['wheel_max_torque'])
 
-        hip_action_clipped = np.clip(hip_action, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
-        shoulder_action_clipped = np.clip(shoulder_action, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
-        leg_action_clipped = np.clip(leg_action, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
-        wheel_action_clipped = np.clip(wheel_action, -self.config['hardware']['wheel_max_torque'], self.config['hardware']['wheel_max_torque'])
-
-        self.applied_torques = np.concatenate([hip_action_clipped, shoulder_action_clipped, leg_action_clipped, wheel_action_clipped])
+        self.applied_torques = np.concatenate([hip_torques_clipped, shoulder_torques_clipped, leg_torques_clipped, wheel_torques_clipped])
         self.do_simulation(self.applied_torques, self.frame_skip)
 
         self.obs, self.scaled_obs = self._get_obs()
