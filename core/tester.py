@@ -48,7 +48,6 @@ class Tester(QObject):
     def deactivate_push_event(self):
         self._push_event = False
 
-
     def test(self):
         # Create environment, policy, and reporter
         self.policy = build_policy(self.config, policy_path=os.path.join(self.policy_path))

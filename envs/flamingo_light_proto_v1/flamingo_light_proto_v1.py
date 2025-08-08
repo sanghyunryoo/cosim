@@ -29,7 +29,6 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
 
         # PD control parameters
         self.kp_shoulder = config["hardware"]["Kp_shoulder"]
-        self.kp_wheel = config["hardware"]["Kp_wheel"]
 
         self.kd_shoulder = config["hardware"]["Kd_shoulder"]
         self.kd_wheel = config["hardware"]["Kd_wheel"]
@@ -51,7 +50,6 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         self.action = np.zeros(self.action_dim)
         self.filtered_action = np.zeros(self.action_dim)
         self.previous_action = np.zeros(self.action_dim)
-        self.computed_torques = np.zeros(self.action_dim)
         self.applied_torques = np.zeros(self.action_dim)
         self.obs = None
         self.scaled_obs = None
@@ -126,13 +124,13 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
         scaled_base_lin_vel = base_lin_vel * self.config["obs_scales"]["lin_vel"]  # scaled_base_lin_vel
 
         if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            height_map = self.mujoco_utils.get_height_map(self.data, self.x_size, self.y_size, self.x_res,self.y_res)  # height_map
+            height_map = self.mujoco_utils.get_height_map(self.data, self.x_size, self.y_size, self.x_res, self.y_res)  # height_map
             height_map = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"],
                                                         lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
         else:
             height_map = None
             
-        tick = int(self.control_freq / self.external_obs_freq)
+        tick = max(1, int(self.control_freq / self.external_obs_freq))
         if self.local_step % tick == 0:     
             self.external_obs["scaled_base_lin_vel"] = scaled_base_lin_vel
             self.external_obs["height_map"] = height_map
@@ -156,19 +154,13 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
             shoulder_action_scaled = self.action[0:2] * self.action_scaler[0:2]
             wheel_action_scaled = self.action[2:4] * self.action_scaler[2:4]
 
-            shoulder_action = self.control_manager.pd_controller(
-                self.kp_shoulder, shoulder_action_scaled, pos_shoulder, self.kd_shoulder, 0.0, vel_shoulder
-            )
-            wheel_action = self.control_manager.pd_controller(
-                self.kp_wheel, 0.0, 0.0, self.kd_wheel, wheel_action_scaled, vel_wheel
-            )
+            shoulder_torques = self.control_manager.pd_controller(self.kp_shoulder, shoulder_action_scaled, pos_shoulder, self.kd_shoulder, 0.0, vel_shoulder)
+            wheel_torques = self.control_manager.pd_controller(0.0, 0.0, 0.0, self.kd_wheel, wheel_action_scaled, vel_wheel)
 
-            self.computed_torques = np.concatenate([shoulder_action, wheel_action])
+            shoulder_torques_clipped = np.clip(shoulder_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
+            wheel_torques_clipped = np.clip(wheel_torques, -self.config['hardware']['wheel_max_torque'], self.config['hardware']['wheel_max_torque'])
 
-            shoulder_action_clipped = np.clip(shoulder_action, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
-            wheel_action_clipped = np.clip(wheel_action, -self.config['hardware']['wheel_max_torque'], self.config['hardware']['wheel_max_torque'])
-
-            self.applied_torques = np.concatenate([shoulder_action_clipped, wheel_action_clipped])
+            self.applied_torques = np.concatenate([shoulder_torques_clipped, wheel_torques_clipped])
 
             self.do_simulation(self.applied_torques, self.frame_skip)
 

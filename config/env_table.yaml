@@ -12,7 +12,6 @@
     "scale_commands": True
   "hardware":
     "Kp_shoulder": "50"
-    "Kp_wheel": "0"
     "Kd_shoulder": "1.5"
     "Kd_wheel": "0.2"
     "joint_max_torque": "12"
@@ -35,10 +34,51 @@
     "Kp_hip": "100"
     "Kp_shoulder": "100"
     "Kp_leg": "150"
-    "Kp_wheel": "0"
     "Kd_hip": "1.5"
     "Kd_shoulder": "1.5"
     "Kd_leg": "2"
     "Kd_wheel": "0.5"
     "joint_max_torque": "45"
     "wheel_max_torque": "45"
+
+
+"gaia_v1":
+  "env":
+    "observation_dim": "52"
+    "action_dim": "23"
+    "command_dim": "4"
+    "command_3_initial": "1.105"
+  "obs_scales":
+    "lin_vel": 2.0
+    "ang_vel": 0.25
+    "dof_pos": 1.0
+    "dof_vel": 0.15
+    "scale_commands": True
+  "hardware":
+    "Kp_hip_pitch": "200"
+    "Kp_torso": "100"
+    "Kp_hip_roll": "150"
+    "Kp_shoulder_pitch": "30"
+    "Kp_hip_yaw": "150"
+    "Kp_shoulder_roll": "30"
+    "Kp_knee": "200"
+    "Kp_shoulder_yaw": "30"
+    "Kp_ankle_pitch": "40"
+    "Kp_elbow_pitch": "20"
+    "Kp_ankle_roll": "40"
+    "Kp_elbow_yaw": "10"
+    "Kd_hip_pitch": "5"
+    "Kd_torso": "2"
+    "Kd_hip_roll": "5"
+    "Kd_shoulder_pitch": "3"
+    "Kd_hip_yaw": "5"
+    "Kd_shoulder_roll": "3"
+    "Kd_knee": "5"
+    "Kd_shoulder_yaw": "1"
+    "Kd_ankle_pitch": "4"
+    "Kd_elbow_pitch": "2"
+    "Kd_ankle_roll": "4"
+    "Kd_elbow_yaw": "1"
+    "legs_joint_max_torque": "300"
+    "feet_joint_max_torque": "200"
+    "arms_joint_max_torque": "150"

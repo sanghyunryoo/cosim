@@ -1,7 +1,7 @@
 import warnings
 import mujoco
 import numpy as np
-from envs.flamingo_v1_5_1.utils.math_utils import MathUtils
+from envs.gaia_v1.utils.math_utils import MathUtils
 
 
 class MuJoCoUtils:
@@ -12,14 +12,14 @@ class MuJoCoUtils:
 
     def get_body_indices_by_name(self, body_names):
         """
-        Get the indices of bodies for given body names.
+        Get the indices of bodies for the given body names.
 
         Args:
             model: MuJoCo mjModel instance.
-            body_names: List of body names to fetch indices for.
+            body_names: List of body names to look up.
 
         Returns:
-            body_indices: List of body indices corresponding to body names.
+            body_indices: List of body indices corresponding to the given names.
         """
         body_indices = []
         for body_name in body_names:
@@ -137,7 +137,7 @@ class MuJoCoUtils:
 
         # Ray parameters
         z_max_world = 10.0  # Starting height for ray above the ground
-        z_min_world = -1.0  # Fallback height if no intersection
+        z_min_world = -5.0  # Fallback height if no intersection
 
         # Create meshgrid in robot's local XY plane
         x_robot = np.linspace(x_min_robot, x_max_robot, num_x, dtype=np.float64)
