@@ -27,6 +27,9 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         else:
             self.use_external_sensors = True
 
+
+        self.action_scaler = np.ones(self.action_dim) * 0.5
+
         # PD control parameters
         self.kp_hip_pitch = config["hardware"]["Kp_hip_pitch"]
         self.kp_torso = config["hardware"]["Kp_torso"]
@@ -53,14 +56,6 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         self.kd_elbow_pitch = config["hardware"]["Kd_elbow_pitch"]    
         self.kd_ankle_roll = config["hardware"]["Kd_ankle_roll"]  
         self.kd_elbow_yaw = config["hardware"]["Kd_elbow_yaw"]       
-   
-
-        self.action_scaler = [0.5, 0.5, 0.5, 0.5,
-                              0.5, 0.5, 0.5, 0.5,
-                              0.5, 0.5, 0.5, 0.5,
-                              0.5, 0.5, 0.5, 0.5,
-                              0.5, 0.5, 0.5, 0.5,
-                              0.5, 0.5, 0.5]
 
         # Set Simulation Properties
         precision_level = self.config["random"]["precision"]
@@ -127,10 +122,6 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
 
         self.q_indices = self.mujoco_utils.get_qpos_joint_indices_by_name(joint_names_in_order)
         self.qd_indices = self.mujoco_utils.get_qvel_joint_indices_by_name(joint_names_in_order)
-
-        print(self.q_indices)
-        print(self.qd_indices)
-      
 
     def _get_obs(self):
         q = self.data.qpos[self.q_indices]
@@ -240,40 +231,9 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         ankle_roll_torques_clipped = np.clip(ankle_roll_torques, -self.config['hardware']['feet_joint_max_torque'], self.config['hardware']['feet_joint_max_torque'])
         elbow_yaw_torques_clipped = np.clip(elbow_yaw_torques, -self.config['hardware']['arms_joint_max_torque'], self.config['hardware']['arms_joint_max_torque'])
 
-        self.applied_torques = np.concatenate([
-            # Torso
-            torso_torques_clipped,                     # 0
-
-            # Left Arm
-            shoulder_pitch_torques_clipped[0:1],       # 1
-            shoulder_roll_torques_clipped[0:1],        # 2
-            shoulder_yaw_torques_clipped[0:1],         # 3
-            elbow_pitch_torques_clipped[0:1],          # 4
-            elbow_yaw_torques_clipped[0:1],            # 5
-
-            # Right Arm
-            shoulder_pitch_torques_clipped[1:2],       # 6
-            shoulder_roll_torques_clipped[1:2],        # 7
-            shoulder_yaw_torques_clipped[1:2],         # 8
-            elbow_pitch_torques_clipped[1:2],          # 9
-            elbow_yaw_torques_clipped[1:2],            # 10
-
-            # Left Leg
-            hip_pitch_torques_clipped[0:1],            # 11
-            hip_roll_torques_clipped[0:1],             # 12
-            hip_yaw_torques_clipped[0:1],              # 13
-            knee_torques_clipped[0:1],                 # 14
-            ankle_pitch_torques_clipped[0:1],          # 15
-            ankle_roll_torques_clipped[0:1],           # 16
-
-            # Right Leg
-            hip_pitch_torques_clipped[1:2],            # 17
-            hip_roll_torques_clipped[1:2],             # 18
-            hip_yaw_torques_clipped[1:2],              # 19
-            knee_torques_clipped[1:2],                 # 20
-            ankle_pitch_torques_clipped[1:2],          # 21
-            ankle_roll_torques_clipped[1:2],           # 22
-        ])
+        self.applied_torques = np.concatenate([hip_pitch_torques_clipped, torso_torques_clipped, hip_roll_torques_clipped, shoulder_pitch_torques_clipped,
+        hip_yaw_torques_clipped, shoulder_roll_torques_clipped,  knee_torques_clipped, shoulder_yaw_torques_clipped, ankle_pitch_torques_clipped,
+        elbow_pitch_torques_clipped, ankle_roll_torques_clipped, elbow_yaw_torques_clipped])
         
         self.do_simulation(self.applied_torques, self.frame_skip)
 
@@ -312,11 +272,11 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         if self.external_obs is not None:
             info['scaled_base_lin_vel'] = self.external_obs['scaled_base_lin_vel']
             info['height_map'] = self.external_obs['height_map']
-
         return info
 
     def _get_reset_info(self):
         info = self._get_info()
+        
         return info
 
     def _is_done(self):
@@ -349,14 +309,14 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
     
     def event(self, event: str, value):
         if event == 'push':
-            # Assume value is given in the robot frame (vx, vy, vz)
-            # Convert this to world-frame velocity and assign to qvel[:3]
+            # Assume value is given in world frame
+            # Convert this to robot-frame
             raw_quat = self.data.qpos[3:7].astype(np.float64)           # [w, x, y, z]
-            R = MathUtils.quat_to_rot_matrix(raw_quat)                  # Local-to-world rotation matrix (3×3)
-            robot_vel = np.array(value, dtype=np.float64).reshape(3,)   # Velocity vector in robot frame
-            world_vel = R.dot(robot_vel)                                # Transform to world-frame velocity
-            self.data.qvel[:2] = world_vel[:2]  # xy: robot frame                        
-            self.data.qvel[2] = value[2]        #  z: world frame
+            R = MathUtils.quat_to_rot_matrix(raw_quat).T                # World-to-local rotation matrix (3×3)
+            world_vel = np.array(value, dtype=np.float64).reshape(3,)   # Velocity in world frame
+            robot_vel = R.dot(world_vel)                                # Transform to robot-frame velocity
+            self.data.qvel[:2] = robot_vel[:2]  # xy: robot frame                        
+            self.data.qvel[2] = world_vel[2]    #  z: world frame
         else:
             raise NotImplementedError(f"event:{event} is not supported.")
 
@@ -372,5 +332,3 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
             self.viewer = None
             print("Viewer closed")
         super().close()  # Call the parent class's close method to ensure everything is properly closed
-
-

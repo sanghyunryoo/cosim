@@ -62,7 +62,7 @@
     "Kp_hip_yaw": "150"
     "Kp_shoulder_roll": "30"
     "Kp_knee": "200"
-    "Kp_shoulder_yaw": "30"
+    "Kp_shoulder_yaw": "10"
     "Kp_ankle_pitch": "40"
     "Kp_elbow_pitch": "20"
     "Kp_ankle_roll": "40"
