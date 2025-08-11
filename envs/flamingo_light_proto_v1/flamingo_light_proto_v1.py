@@ -254,14 +254,14 @@ class FlamingoLightProtoV1(MujocoEnv, utils.EzPickle):
     
     def event(self, event: str, value):
         if event == 'push':
-            # Assume value is given in the robot frame (vx, vy, vz)
-            # Convert this to world-frame velocity and assign to qvel[:3]
+            # Assume value is given in world frame
+            # Convert this to robot-frame
             raw_quat = self.data.qpos[3:7].astype(np.float64)           # [w, x, y, z]
-            R = MathUtils.quat_to_rot_matrix(raw_quat)                  # Local-to-world rotation matrix (3×3)
-            robot_vel = np.array(value, dtype=np.float64).reshape(3,)   # Velocity vector in robot frame
-            world_vel = R.dot(robot_vel)                                # Transform to world-frame velocity
-            self.data.qvel[:2] = world_vel[:2]  # xy: robot frame                        
-            self.data.qvel[2] = value[2]        #  z: world frame
+            R = MathUtils.quat_to_rot_matrix(raw_quat).T                # World-to-local rotation matrix (3×3)
+            world_vel = np.array(value, dtype=np.float64).reshape(3,)   # Velocity in world frame
+            robot_vel = R.dot(world_vel)                                # Transform to robot-frame velocity
+            self.data.qvel[:2] = robot_vel[:2]  # xy: robot frame                        
+            self.data.qvel[2] = world_vel[2]    #  z: world frame
         else:
             raise NotImplementedError(f"event:{event} is not supported.")
 
