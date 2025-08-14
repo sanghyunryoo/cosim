@@ -31,8 +31,7 @@
     </default>
 
     <worldbody>
-
-    <geom name="ground" pos="0 0 0" type="hfield" hfield="flat" material="MatPlane" friction="0.8 0.02 0.01" condim="3"/>
+    <geom name="ground" pos="0 0 0" type="hfield" material="MatPlane" friction="0.8 0.02 0.01" condim="3"/>
         <body name="base_link" pos="0.0 0.0 0.36288">
             <inertial pos="-0.00543 -0.00007 0.09091" quat="0.9715 0.0224 -0.2347 -0.0077" mass="5.42961" diaginertia="0.06019 0.03502 0.0371"/>
             <geom size="0.05 0.15 0.15" pos="0.0315 0 0.092" type="box" rgba="0.8 0.2 0.2 0.3" class="collision"/>
@@ -131,7 +130,6 @@
         <mesh name="back_plate_link" file="../mesh/back_plate_link.STL"/>
         <mesh name="front_cover_link" file="../mesh/front_cover_link.STL"/>
 
-        <hfield name="flat" file="../terrain/flat.png" nrow="256" ncol="256" size="140 140 10 0.1"/>
         <hfield name="rocky_easy" file="../terrain/rocky_easy.png" nrow="512" ncol="512" size="140 140 0.1 0.1"/>
         <hfield name="rocky_hard" file="../terrain/rocky_hard.png" nrow="512" ncol="512" size="140 140 0.25 0.1"/>
         <hfield name="slope_easy" file="../terrain/slope_easy.png" nrow="512" ncol="512" size="140 140 0.5 0.1"/>

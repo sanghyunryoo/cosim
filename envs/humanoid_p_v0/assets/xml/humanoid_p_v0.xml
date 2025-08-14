@@ -27,7 +27,7 @@
     </default>
 
   <worldbody>
-    <geom name="groundplane" pos="0 0 0" size="140 140 0.1" type="plane" material="MatPlane" friction="0.8 0.02 0.01" condim="3" solref="0.002 1" solimp="0.9 0.95 0.05" />
+    <geom name="ground" pos="0 0 0" type="hfield" material="MatPlane" friction="0.8 0.02 0.01" condim="3"/>
       <body name="pelvis_link" pos="0 0 1.105">
       <inertial pos="-0.00132217 0.00027990 -0.05941299" mass="12.59124000" diaginertia="0.05604165 0.06550740 0.08055687" quat="-0.49994928 0.50004500 -0.49996197 -0.50004373" />
       <geom size="0.1 0.1 0.05" pos="0 0 -0.05" type="box" rgba="0.2 0.2 0.2 1" />
@@ -210,6 +210,14 @@
     <mesh name="right_knee_link" file="../mesh/right_knee_link.STL" />
     <mesh name="right_ankle_pitch_link" file="../mesh/right_ankle_pitch_link.STL" />
     <mesh name="right_ankle_roll_link" file="../mesh/right_ankle_roll_link.STL" />
+
+    <hfield name="rocky_easy" file="../terrain/rocky_easy.png" nrow="512" ncol="512" size="64 64 0.1 0.1"/>
+    <hfield name="rocky_hard" file="../terrain/rocky_hard.png" nrow="512" ncol="512" size="64 64 0.25 0.1"/>
+    <hfield name="slope_easy" file="../terrain/slope_easy.png" nrow="512" ncol="512" size="32 32 0.5 0.1"/>
+    <hfield name="slope_hard" file="../terrain/slope_hard.png" nrow="512" ncol="512" size="32 32 1 0.1"/>
+    <hfield name="stairs_up_easy" file="../terrain/stairs_up_easy.png" nrow="512" ncol="512" size="5 5 0.60 0.5"/>
+    <hfield name="stairs_up_normal" file="../terrain/stairs_up_normal.png" nrow="512" ncol="512" size="5 5 0.7 0.5"/>
+    <hfield name="stairs_up_hard" file="../terrain/stairs_up_hard.png" nrow="512" ncol="512" size="5 5 0.825 0.5"/>
   </asset>
 
   <sensor>

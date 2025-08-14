@@ -215,7 +215,7 @@ class StateBuildWrapper(BaseEnv):
         """
         Step through the environment and build the next state.
         """
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
+        assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         self.sim_step += 1
         next_obs, terminated, truncated, info = self.env.step(action)
         next_state = self._build_state(next_obs, reset=False)
@@ -261,7 +261,7 @@ class TimeLimitWrapper(BaseEnv):
         return init_state, info
 
     def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
+        assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         self.sim_step += 1
         next_state, terminated, truncated, info = self.env.step(action)
         if terminated or truncated:
@@ -335,7 +335,7 @@ class CommandWrapper(BaseEnv):
         return init_state, info
 
     def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
+        assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         next_state, terminated, truncated, info = self.env.step(action)
         next_state = np.concatenate((next_state, self.applied_command))
 
@@ -346,6 +346,8 @@ class CommandWrapper(BaseEnv):
             info["lin_vel_x_command"] = self.user_command[0]
             info["lin_vel_y_command"] = self.user_command[1]
             info["ang_vel_z_command"] = self.user_command[2]
+        else:
+            raise ValueError(f"Invalid 'command_dim': expected 2 (lin_vel_x, ang_vel_z) or >= 3 (lin_vel_x, lin_vel_y, ang_vel_z, ... ); but got {self.command_dim}.")
 
         if terminated or truncated:
             self.reset_flag = False

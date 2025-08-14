@@ -337,7 +337,7 @@ class Reporter:
                             # If the parameter is observation.stacked_obs_order or observation.non_stacked_obs_order
                             param_name = table_data[start_idx + row - 1][0].strip()
                             if any(kw in param_name for kw in ["stacked_obs_order", "non_stacked_obs_order"]):
-                                cell.set_fontsize(7.25)
+                                cell.set_fontsize(7)
 
                 pdf.savefig(fig_config)
                 plt.close(fig_config)

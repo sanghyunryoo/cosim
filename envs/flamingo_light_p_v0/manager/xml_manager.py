@@ -18,10 +18,17 @@ class XMLManager:
 
         # 1. Set the terrain
         terrain = self.config["env"]["terrain"]
+
         for geom in root.findall('.//geom'):
             if geom.attrib.get('name') == "ground":
-                geom.attrib["hfield"] = terrain
-
+                if terrain == "flat":
+                    geom.attrib["type"] = "plane"
+                    geom.attrib.pop("hfield", None)
+                    geom.attrib["size"] = "100 100 0.1" 
+                else:
+                    geom.attrib["type"] = "hfield"
+                    geom.attrib["hfield"] = terrain
+                    
         # 2. Set the precision of the simulation
         precision_level = self.config["random"]["precision"]
         if precision_level in self.precision_attr_map:
