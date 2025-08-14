@@ -26,7 +26,7 @@ class Tester(QObject):
 
     def init_user_command(self):
         """Initialize the user command array before starting the test."""
-        self.user_command = np.zeros(self.config["env"]["command_dim"])
+        self.user_command = np.zeros(self.config["observation"]["command_dim"])
 
     def receive_user_command(self):
         """Send the current user command value to the environment."""
@@ -38,7 +38,7 @@ class Tester(QObject):
         """Called from the UI to update a specific index of the command."""
         if self.user_command is None:
             self.init_user_command()
-        if index < self.config["env"]["command_dim"]:
+        if index < self.config["observation"]["command_dim"]:
             self.user_command[index] = value
 
     def activate_push_event(self, push_vel):

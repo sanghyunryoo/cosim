@@ -3,32 +3,24 @@ from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.spaces import Box
 import numpy as np
 import mujoco
-from envs.gaia_v1.manager.control_manager import ControlManager
-from envs.gaia_v1.manager.xml_manager import XMLManager
-from envs.gaia_v1.utils.math_utils import MathUtils
-from envs.gaia_v1.utils.mujoco_utils import MuJoCoUtils
-from envs.gaia_v1.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
+from envs.humanoid_p_v0.manager.control_manager import ControlManager
+from envs.humanoid_p_v0.manager.xml_manager import XMLManager
+from envs.humanoid_p_v0.utils.math_utils import MathUtils
+from envs.humanoid_p_v0.utils.mujoco_utils import MuJoCoUtils
+from envs.humanoid_p_v0.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
 import glfw
 
 
-class GaiaV1(MujocoEnv, utils.EzPickle):
+class HumanoidPV0(MujocoEnv, utils.EzPickle):
     metadata = {"render_modes": ["human", "rgb_array", "depth_array"]}
     def __init__(self, config, render_flag=True, render_mode='human'):
         # Set Basic Properties
-        self.id = "gaia_v1"
+        self.id = "humanoid_p_v0"
         self.config = config
-        self.state_dim = config["env"]["observation_dim"]
-        self.action_dim = config["env"]["action_dim"]
-        self.command_dim = config["env"]["command_dim"]
+        self.action_dim = 23
+        self.action_scaler = np.ones(self.action_dim) * 0.5
         self.render_mode = render_mode
         self.render_flag = render_flag
-        if config["env"]["external_sensors"] == "None":
-            self.use_external_sensors = False
-        else:
-            self.use_external_sensors = True
-
-
-        self.action_scaler = np.ones(self.action_dim) * 0.5
 
         # PD control parameters
         self.kp_hip_pitch = config["hardware"]["Kp_hip_pitch"]
@@ -65,24 +57,41 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         self.frame_skip = config["random_table"]["precision"][precision_level]["frame_skip"]
         self.sensor_noise_map = config["random_table"]["sensor_noise"][sensor_noise_level]
         self.control_freq = 1 / (self.dt_ * self.frame_skip)
+        assert self.control_freq == 50, "Currently, only control frequency of 50 is supported."
         self.local_step = 0
 
         # Set Placeholders
         self.action = np.zeros(self.action_dim)
         self.filtered_action = np.zeros(self.action_dim)
-        self.previous_action = np.zeros(self.action_dim)
+        self.prev_action = np.zeros(self.action_dim)
         self.applied_torques = np.zeros(self.action_dim)
-        self.obs = None
-        self.scaled_obs = None
         self.viewer = None
         self.mode = None
-        if self.use_external_sensors:
-            self.external_obs = {}
-            self.external_obs_freq = float(self.config['env']['external_sensors_Hz'])
 
         # Domain Randomization
         self.xml_manager = XMLManager(config)
         self.model_path = self.xml_manager.get_model_path()
+
+        # Height Map
+        if self.config["observation"]["height_map"] is not None:
+            self.size_x = self.config["observation"]["height_map"]["size_x"]
+            self.size_y = self.config["observation"]["height_map"]["size_y"]
+            self.res_x = self.config["observation"]["height_map"]["res_x"]
+            self.res_y = self.config["observation"]["height_map"]["res_y"]
+        else:
+            self.res_x = 0
+            self.res_y = 0
+
+        # Set dimensions of observations
+        self.obs_to_dim = {
+            "dof_pos": 23,
+            "dof_vel": 23,
+            "ang_vel": 3,
+            "lin_vel": 3,
+            "projected_gravity": 3,
+            "last_action": self.action_dim,
+            "height_map": int(self.res_x * self.res_y)
+        }
 
         # Set MuJoCo Wrapper
         utils.EzPickle.__init__(self)
@@ -90,21 +99,14 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
             self,
             model_path=self.model_path,
             frame_skip=self.frame_skip,
-            observation_space=Box(low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32,),
+            observation_space=Box(low=-np.inf, high=np.inf, shape=(sum(self.obs_to_dim.values()),), dtype=np.float32,),
             render_mode=self.render_mode if render_flag else None,
         )
 
         # Set other Managers and Helpers
         self.control_manager = ControlManager(config)
         self.mujoco_utils = MuJoCoUtils(self.model)
-
-        # Height Map
-        if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            self.x_size = self.config["env"]["height_map"]["x_size"]
-            self.y_size = self.config["env"]["height_map"]["y_size"]
-            self.x_res = self.config["env"]["height_map"]["x_res"]
-            self.y_res = self.config["env"]["height_map"]["y_res"]
-            self.mujoco_utils.init_heightmap_visualization(self.x_res, self.y_res)
+        self.mujoco_utils.init_heightmap_visualization(self.res_x, self.res_y)
 
         # Set Indices of q and qd
         joint_names_in_order = ["left_hip_pitch_joint", "right_hip_pitch_joint",
@@ -124,72 +126,57 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         self.qd_indices = self.mujoco_utils.get_qvel_joint_indices_by_name(joint_names_in_order)
 
     def _get_obs(self):
-        q = self.data.qpos[self.q_indices]
-        qd = self.data.qvel[self.qd_indices]
+        dof_pos = self.data.qpos[self.q_indices]
+        dof_vel = self.data.qvel[self.qd_indices]
+        ang_vel = self.data.sensor('angular-velocity').data.astype(np.double)
+        lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)
         quat = self.data.sensor('orientation').data[[1, 2, 3, 0]].astype(np.double)
         if np.all(quat == 0):
             quat = np.array([0, 0, 0, 1])
-
-        omega = self.data.sensor('angular-velocity').data.astype(np.double)
         projected_gravity = MathUtils.quat_to_base_vel(quat, np.array([0, 0, -1], dtype=np.double))
-
-        q = truncated_gaussian_noisy_data(q, mean=self.sensor_noise_map["q"]["mean"], std=self.sensor_noise_map["q"]["std"],
-                                          lower=self.sensor_noise_map["q"]["lower"], upper=self.sensor_noise_map["q"]["upper"])
-        qd = truncated_gaussian_noisy_data(qd, mean=self.sensor_noise_map["qd"]["mean"], std=self.sensor_noise_map["qd"]["std"],
-                                          lower=self.sensor_noise_map["qd"]["lower"], upper=self.sensor_noise_map["qd"]["upper"])
-        omega = truncated_gaussian_noisy_data(omega, mean=self.sensor_noise_map["omega"]["mean"], std=self.sensor_noise_map["omega"]["std"],
-                                          lower=self.sensor_noise_map["omega"]["lower"], upper=self.sensor_noise_map["omega"]["upper"])
-        projected_gravity = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"],
-                                          lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
-        obs = np.concatenate([q, qd, omega, projected_gravity])
-        scaled_obs = np.concatenate([q * self.config["obs_scales"]["dof_pos"], qd * self.config["obs_scales"]["dof_vel"], omega * self.config["obs_scales"]["ang_vel"], projected_gravity])
-
-        return obs, scaled_obs
-    
-    def _get_external_obs(self):
-        if not self.use_external_sensors:
-            return None
-
-        base_lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)  # [vx, vy, vz]
-        base_lin_vel = truncated_gaussian_noisy_data(base_lin_vel, mean=self.sensor_noise_map["base_lin_vel"]["mean"], std=self.sensor_noise_map["base_lin_vel"]["std"],
-                                                      lower=self.sensor_noise_map["base_lin_vel"]["lower"], upper=self.sensor_noise_map["base_lin_vel"]["upper"])
-        scaled_base_lin_vel = base_lin_vel * self.config["obs_scales"]["lin_vel"]  # scaled_base_lin_vel
-
-        if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            height_map = self.mujoco_utils.get_height_map(self.data, self.x_size, self.y_size, self.x_res,self.y_res)  # height_map
-            height_map = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"],
-                                                        lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
+        if self.config["observation"]["height_map"] is not None:
+            height_map = self.mujoco_utils.get_height_map(self.data, self.size_x, self.size_y, self.res_x, self.res_y) 
         else:
             height_map = None
 
-        tick = max(1, int(self.control_freq / self.external_obs_freq))
-        if self.local_step % tick == 0:     
-            self.external_obs["scaled_base_lin_vel"] = scaled_base_lin_vel
-            self.external_obs["height_map"] = height_map
-
-        return self.external_obs
+        dof_pos_noisy = truncated_gaussian_noisy_data(dof_pos, mean=self.sensor_noise_map["dof_pos"]["mean"], std=self.sensor_noise_map["dof_pos"]["std"], lower=self.sensor_noise_map["dof_pos"]["lower"], upper=self.sensor_noise_map["dof_pos"]["upper"])
+        dof_vel_noisy = truncated_gaussian_noisy_data(dof_vel, mean=self.sensor_noise_map["dof_vel"]["mean"], std=self.sensor_noise_map["dof_vel"]["std"], lower=self.sensor_noise_map["dof_vel"]["lower"], upper=self.sensor_noise_map["dof_vel"]["upper"])
+        ang_vel_noisy = truncated_gaussian_noisy_data(ang_vel, mean=self.sensor_noise_map["ang_vel"]["mean"], std=self.sensor_noise_map["ang_vel"]["std"], lower=self.sensor_noise_map["ang_vel"]["lower"], upper=self.sensor_noise_map["ang_vel"]["upper"])
+        lin_vel_noisy = truncated_gaussian_noisy_data(lin_vel, mean=self.sensor_noise_map["lin_vel"]["mean"], std=self.sensor_noise_map["lin_vel"]["std"], lower=self.sensor_noise_map["lin_vel"]["lower"], upper=self.sensor_noise_map["lin_vel"]["upper"])
+        projected_gravity_noisy = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"], lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
+        height_map_noisy = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"], lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
+        
+        return {
+            "dof_pos": dof_pos_noisy,
+            "dof_vel": dof_vel_noisy,
+            "ang_vel": ang_vel_noisy,
+            "lin_vel": lin_vel_noisy,
+            "projected_gravity": projected_gravity_noisy,
+            "height_map": height_map_noisy,
+            "last_action": self.action
+        }
 
     def step(self, action):
         self.action = action
         self.filtered_action = self.control_manager.delay_filter(action)
 
         # Pull the current joint positions and velocities
-        q = self.data.qpos[self.q_indices]
-        qd = self.data.qvel[self.qd_indices]
+        dof_pos = self.data.qpos[self.q_indices]
+        dof_vel = self.data.qvel[self.qd_indices]
 
         # Extract joint positions and velocities from observation (order from Isaac Lab)
-        pos_hip_pitch, vel_hip_pitch = q[0:2], qd[0:2]
-        pos_torso, vel_torso = q[2:3], qd[2:3]
-        pos_hip_roll, vel_hip_roll = q[3:5], qd[3:5]
-        pos_shoulder_pitch, vel_shoulder_pitch = q[5:7], qd[5:7]
-        pos_hip_yaw, vel_hip_yaw = q[7:9], qd[7:9]
-        pos_shoulder_roll, vel_shoulder_roll = q[9:11], qd[9:11]
-        pos_knee, vel_knee = q[11:13], qd[11:13]
-        pos_shoulder_yaw, vel_shoulder_yaw = q[13:15], qd[13:15]
-        pos_ankle_pitch, vel_ankle_pitch = q[15:17], qd[15:17]
-        pos_elbow_pitch, vel_elbow_pitch = q[17:19], qd[17:19]
-        pos_ankle_roll, vel_ankle_roll = q[19:21], qd[19:21]
-        pos_elbow_yaw, vel_elbow_yaw = q[21:23], qd[21:23]
+        pos_hip_pitch, vel_hip_pitch = dof_pos[0:2], dof_vel[0:2]
+        pos_torso, vel_torso = dof_pos[2:3], dof_vel[2:3]
+        pos_hip_roll, vel_hip_roll = dof_pos[3:5], dof_vel[3:5]
+        pos_shoulder_pitch, vel_shoulder_pitch = dof_pos[5:7], dof_vel[5:7]
+        pos_hip_yaw, vel_hip_yaw = dof_pos[7:9], dof_vel[7:9]
+        pos_shoulder_roll, vel_shoulder_roll = dof_pos[9:11], dof_vel[9:11]
+        pos_knee, vel_knee = dof_pos[11:13], dof_vel[11:13]
+        pos_shoulder_yaw, vel_shoulder_yaw = dof_pos[13:15], dof_vel[13:15]
+        pos_ankle_pitch, vel_ankle_pitch = dof_pos[15:17], dof_vel[15:17]
+        pos_elbow_pitch, vel_elbow_pitch = dof_pos[17:19], dof_vel[17:19]
+        pos_ankle_roll, vel_ankle_roll = dof_pos[19:21], dof_vel[19:21]
+        pos_elbow_yaw, vel_elbow_yaw = dof_pos[21:23], dof_vel[21:23]
 
         # Get the scaled action
         hip_pitch_action_scaled = self.filtered_action[0:2] * self.action_scaler[0:2]
@@ -237,46 +224,37 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
         
         self.do_simulation(self.applied_torques, self.frame_skip)
 
-        self.obs, self.scaled_obs = self._get_obs()
+        obs = self._get_obs()
         info = self._get_info()
         terminated = self._is_done()
         truncated = False
 
-        self.previous_action = self.action
+        self.prev_action = self.action
         self.local_step += 1  
 
-        return self.scaled_obs, terminated, truncated, info
+        return obs, terminated, truncated, info
 
     def _get_info(self):
-        q = self.data.qpos[self.q_indices]
-        cur_state = q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9], \
-                    q[10], q[11], q[12], q[13], q[14], q[15], q[16], q[17], q[18], q[19], \
-                    q[20], q[21], q[22] 
+        dof_pos = self.data.qpos[self.q_indices]
+        ang_vel = self.data.sensor('angular-velocity').data.astype(np.double)
+        lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)
+        cur_state = dof_pos
 
         info = {
             "dt": self.dt_ * self.frame_skip,
             "action": self.action,
             "torque": self.applied_torques,
-            "action_diff_RMS": np.linalg.norm(self.action - self.previous_action),
-            "lin_vel_x": self.data.sensor('linear-velocity').data.astype(np.float32)[0],
-            "lin_vel_y": self.data.sensor('linear-velocity').data.astype(np.float32)[1],
-            "ang_vel_z": self.obs[48],
-            "pos_z" : self.data.qpos[2],
-            "ang_roll" :  self.obs[49],
-            "ang_pitch":  self.obs[50],
+            "action_diff_RMS": np.linalg.norm(self.action - self.prev_action),
+            "lin_vel_x": lin_vel[0],
+            "lin_vel_y": lin_vel[1],
+            "ang_vel_z": ang_vel[2],
             "set_points": self.action * self.action_scaler,
             "cur_state": cur_state
         }
-
-        self.external_obs = self._get_external_obs()
-        if self.external_obs is not None:
-            info['scaled_base_lin_vel'] = self.external_obs['scaled_base_lin_vel']
-            info['height_map'] = self.external_obs['height_map']
         return info
 
     def _get_reset_info(self):
         info = self._get_info()
-        
         return info
 
     def _is_done(self):
@@ -295,9 +273,8 @@ class GaiaV1(MujocoEnv, utils.EzPickle):
 
         mujoco.mj_forward(self.model, self.data)
 
-        self.obs, self.scaled_obs = self._get_obs()
-        
-        return self.scaled_obs
+        obs = self._get_obs()     
+        return obs
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)

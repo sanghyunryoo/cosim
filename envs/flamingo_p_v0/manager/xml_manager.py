@@ -6,20 +6,13 @@ class XMLManager:
     def __init__(self, config):
         self.config = config
         self.cur_dir = os.path.abspath(os.path.dirname(__file__))
-        self.body_components =["pelvis_link", "torso_link",
-            "left_shoulder_pitch_link", "left_shoulder_roll_link", "left_shoulder_yaw_link", 
-            "left_elbow_pitch_link", "left_elbow_yaw_link",
-            "right_shoulder_pitch_link", "right_shoulder_roll_link", "right_shoulder_yaw_link",
-            "right_elbow_pitch_link", "right_elbow_yaw_link",
-            "left_hip_pitch_link", "left_hip_roll_link", "left_hip_yaw_link",
-            "left_knee_link", "left_ankle_pitch_link", "left_ankle_roll_link",
-            "right_hip_pitch_link", "right_hip_roll_link", "right_hip_yaw_link",
-            "right_knee_link", "right_ankle_pitch_link", "right_ankle_roll_link"]
+        self.body_components =["base_link", "left_hip_link", "right_hip_link", "left_shoulder_link", "right_shoulder_link",
+                          "left_leg_link", "right_leg_link", "left_wheel_link", "right_wheel_link"]
 
         self.precision_attr_map = config["random_table"]["precision"]
 
     def get_model_path(self):
-        original_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'gaia_v1.xml')
+        original_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'flamingo_p_v0.xml')
         tree = ET.parse(original_model_path)
         root = tree.getroot()
 
@@ -48,13 +41,13 @@ class XMLManager:
                         noise = np.random.uniform(-original_mass * self.config["random"]["mass_noise"],
                                                   original_mass * self.config["random"]["mass_noise"])
                         randomized_mass = original_mass + noise
-                        if body_name == "pelvis_link":
+                        if body_name == "base_link":
                             randomized_mass += self.config["random"]["load"]
                         inertial.attrib['mass'] = str(randomized_mass)
 
-        # 4. Set the friction of wheel geoms in left_ankle_pitch_joint and right_ankle_pitch_joint
+        # 4. Set the friction of wheel geoms in left_wheel_link and right_wheel_link
         for body in root.findall('.//body'):
-            if body.attrib.get('name') in ['left_ankle_pitch_joint', 'right_ankle_pitch_joint']:
+            if body.attrib.get('name') in ['left_wheel_link', 'right_wheel_link']:
                 for geom in body.findall('geom'):
                     if 'friction' in geom.attrib:
                         geom.attrib['friction'] = (
@@ -85,24 +78,24 @@ class XMLManager:
                         joint.attrib['frictionloss'] = str(self.config["random"]["friction_loss"])
 
         # 7. Initialize spheres for height map
-        if self.config["env"]["external_sensors"] != "None" and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            x_res = self.config["env"]["height_map"]["x_res"]
-            y_res = self.config["env"]["height_map"]["y_res"]
+        if self.config["observation"]["height_map"] is not None:
+            res_x = self.config["observation"]["height_map"]["res_x"]
+            res_y = self.config["observation"]["height_map"]["res_y"]
 
             # Find <worldbody> and then <body name="base_link">
             worldbody = root.find('worldbody')
             base_link = None
             for body in worldbody.findall('body'):
-                if body.get('name') == 'pelvis_link':
+                if body.get('name') == 'base_link':
                     base_link = body
                     break
 
             if base_link is None:
-                raise ValueError("Could not find <body name='pelvis_link' (whch is the base link)> in the XML file.")
+                raise ValueError("Could not find <body name='base_link'> in the XML file.")
 
             # Add <site> elements
-            for i in range(y_res):
-                for j in range(x_res):
+            for i in range(res_y):
+                for j in range(res_x):
                     site_name = f"heightmap_site_{i}_{j}"
                     site_element = ET.Element('site', {
                         'name': site_name,
@@ -114,7 +107,7 @@ class XMLManager:
                     })
                     base_link.append(site_element)
 
-        randomized_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'applied_gaia_v1.xml')
+        randomized_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'applied_flamingo_p_v0.xml')
         tree.write(randomized_model_path)
         return randomized_model_path
 

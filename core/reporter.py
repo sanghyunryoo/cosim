@@ -76,7 +76,7 @@ class Reporter:
         Applies indentation for nested keys.
         """
         rows = []
-        indent_str = "    " * indent  # 들여쓰기는 공백 4칸씩
+        indent_str = "    " * indent  # Indent with 4 spaces for each level
         for key, value in config.items():
             if isinstance(value, dict):
                 rows.append([f"{indent_str}{key}", ""])
@@ -93,7 +93,7 @@ class Reporter:
         Generates a multi-page PDF report summarizing logged data and configuration.
         The report includes plots and tables formatted for A4 portrait pages.
         """
-        PAGE_SIZE = (8.27, 11.69)
+        PAGE_SIZE = (8.27, 11.69)  # A4 size in inches
         dt = float(self.history.get('dt', [1])[0])
         times = np.arange(self.timesteps) * dt
 
@@ -163,35 +163,44 @@ class Reporter:
                 if set_points.ndim == 1:
                     set_points = set_points.reshape(-1, 1)
                     cur_state = cur_state.reshape(-1, 1)
+
                 n_dims = set_points.shape[1]
-                n_cols = 1 if n_dims == 1 else 2
-                n_rows = math.ceil(n_dims / n_cols)
-                fig, axes = plt.subplots(n_rows, n_cols, figsize=PAGE_SIZE)
-                fig.suptitle("Set Points vs. Actual State", fontsize=16, fontweight='bold')
 
-                if n_rows * n_cols == 1:
-                    axes = np.array([axes])
-                else:
-                    axes = np.array(axes).flatten()
+                MAX_PLOTS_PER_PAGE = 8
+                N_COLS = 2
 
-                for idx in range(n_dims):
-                    ax = axes[idx]
-                    ax.plot(times, set_points[:, idx], marker='o', linestyle='-', markersize=DEFAULT_MARKER_SIZE,
-                            label="Set Point")
-                    ax.plot(times, cur_state[:, idx], marker='^', linestyle='-.', markersize=DEFAULT_MARKER_SIZE,
-                            label="Current State")
-                    ax.set_xlabel("Time (s)", fontsize=10)
-                    ax.set_ylabel(f"Dimension {idx}", fontsize=10)
-                    ax.set_title(f"Dimension {idx}", fontsize=12)
-                    ax.legend(fontsize=8)
-                    ax.grid(True)
+                for start in range(0, n_dims, MAX_PLOTS_PER_PAGE):
+                    end = min(start + MAX_PLOTS_PER_PAGE, n_dims)
+                    dims_this_page = end - start
+                    n_rows = math.ceil(dims_this_page / N_COLS)
 
-                for idx in range(n_dims, len(axes)):
-                    fig.delaxes(axes[idx])
+                    fig, axes = plt.subplots(n_rows, N_COLS, figsize=PAGE_SIZE)
+                    fig.suptitle("Set Points vs. Actual State", fontsize=16, fontweight='bold')
 
-                fig.tight_layout(rect=[0, 0, 1, 0.95])
-                pdf.savefig(fig)
-                plt.close(fig)
+                    if isinstance(axes, np.ndarray):
+                        axes = axes.flatten()
+                    else:
+                        axes = np.array([axes])
+
+                    for local_idx, dim_idx in enumerate(range(start, end)):
+                        ax = axes[local_idx]
+                        ax.plot(times, set_points[:, dim_idx], marker='o', linestyle='-',
+                                markersize=DEFAULT_MARKER_SIZE, label="Set Point")
+                        ax.plot(times, cur_state[:, dim_idx], marker='^', linestyle='-.',
+                                markersize=DEFAULT_MARKER_SIZE, label="Current State")
+                        ax.set_xlabel("Time (s)", fontsize=10)
+                        ax.set_ylabel(f"Dimension {dim_idx}", fontsize=10)
+                        ax.set_title(f"Dimension {dim_idx}", fontsize=12)
+                        ax.legend(fontsize=8)
+                        ax.grid(True)
+
+                    # Remove unused subplots
+                    for j in range(dims_this_page, len(axes)):
+                        fig.delaxes(axes[j])
+
+                    fig.tight_layout(rect=[0, 0, 1, 0.95])
+                    pdf.savefig(fig)
+                    plt.close(fig)
 
             # ===============================
             # 2. Command vs. Actual Values
@@ -199,59 +208,58 @@ class Reporter:
             command_keys = [
                 ("lin_vel_x_command", "lin_vel_x", "Linear Velocity X"),
                 ("lin_vel_y_command", "lin_vel_y", "Linear Velocity Y"),
-                ("ang_vel_z_command", "ang_vel_z", "Angular Velocity Z")
+                ("ang_vel_z_command", "ang_vel_z", "Angular Velocity Z"),
+                # Add more if needed
             ]
-            optional_keys = [
-                ("pos_z_command", "pos_z", "Position Z"),
-                ("ang_roll_command", "ang_roll", "Angular Roll"),
-                ("ang_pitch_command", "ang_pitch", "Angular Pitch")
+
+            plot_keys = [
+                (cmd_key, actual_key, label)
+                for (cmd_key, actual_key, label) in command_keys
+                if (cmd_key in self.history and actual_key in self.history)
             ]
-            plot_keys = []
-            for cmd_key, actual_key, label in command_keys + optional_keys:
-                if cmd_key in self.history and actual_key in self.history:
-                    plot_keys.append((cmd_key, actual_key, label))
+
+            MAX_PLOTS_PER_PAGE = 8
+            N_COLS = 2
 
             if plot_keys:
-                n_plots = len(plot_keys)
-                if n_plots <= 2:
-                    n_cols = n_plots
-                    n_rows = 1
-                else:
-                    n_cols = 2
-                    n_rows = math.ceil(n_plots / 2)
-                fig, axes = plt.subplots(n_rows, n_cols, figsize=PAGE_SIZE)
-                fig.suptitle("Command vs. Actual Values", fontsize=16, fontweight='bold')
+                for start in range(0, len(plot_keys), MAX_PLOTS_PER_PAGE):
+                    page_keys = plot_keys[start:start + MAX_PLOTS_PER_PAGE]
+                    n_plots = len(page_keys)
+                    n_rows = math.ceil(n_plots / N_COLS)
 
-                if n_rows * n_cols == 1:
-                    axes = np.array([axes])
-                else:
-                    axes = np.array(axes).flatten()
+                    fig, axes = plt.subplots(n_rows, N_COLS, figsize=PAGE_SIZE)
+                    fig.suptitle("Command vs. Actual Values", fontsize=16, fontweight='bold')
 
-                for idx, (cmd_key, actual_key, label) in enumerate(plot_keys):
-                    cmd_values = np.array(self.history[cmd_key], dtype=float)
-                    actual_values = np.array(self.history[actual_key], dtype=float)
-                    ax = axes[idx]
-                    ax.plot(times, cmd_values, marker='o', linestyle='-', markersize=DEFAULT_MARKER_SIZE,
-                            label=f"{label} Command")
-                    if label == 'Position Z':
-                        ax.plot(times, actual_values, marker='x', linestyle='--', markersize=DEFAULT_MARKER_SIZE,
-                                label=f"{label} Actual (Absolute)")
+                    if isinstance(axes, np.ndarray):
+                        axes = axes.flatten()
                     else:
-                        ax.plot(times, actual_values, marker='x', linestyle='--', markersize=DEFAULT_MARKER_SIZE,
-                                label=f"{label} Actual")
-                    ax.set_xlabel("Time (s)", fontsize=10)
-                    ax.set_ylabel(label, fontsize=10)
-                    ax.set_title(f"{label}", fontsize=12)
-                    ax.legend(fontsize=8)
-                    ax.grid(True)
+                        axes = np.array([axes])
 
-                for idx in range(len(plot_keys), len(axes)):
-                    fig.delaxes(axes[idx])
+                    for idx, (cmd_key, actual_key, label) in enumerate(page_keys):
+                        cmd_values = np.array(self.history[cmd_key], dtype=float)
+                        actual_values = np.array(self.history[actual_key], dtype=float)
+                        ax = axes[idx]
+                        ax.plot(times, cmd_values, marker='o', linestyle='-',
+                                markersize=DEFAULT_MARKER_SIZE, label=f"{label} Command")
+                        if label == 'Position Z':
+                            ax.plot(times, actual_values, marker='x', linestyle='--',
+                                    markersize=DEFAULT_MARKER_SIZE, label=f"{label} Actual (Absolute)")
+                        else:
+                            ax.plot(times, actual_values, marker='x', linestyle='--',
+                                    markersize=DEFAULT_MARKER_SIZE, label=f"{label} Actual")
+                        ax.set_xlabel("Time (s)", fontsize=10)
+                        ax.set_ylabel(label, fontsize=10)
+                        ax.set_title(label, fontsize=12)
+                        ax.legend(fontsize=8)
+                        ax.grid(True)
 
-                fig.tight_layout(rect=[0, 0, 1, 0.95])
-                pdf.savefig(fig)
-                plt.close(fig)
+                    for j in range(n_plots, len(axes)):
+                        fig.delaxes(axes[j])
 
+                    fig.tight_layout(rect=[0, 0, 1, 0.95])
+                    pdf.savefig(fig)
+                    plt.close(fig)
+                    
             # ===============================
             # 3. Action Oscillation and Torques
             # ===============================
@@ -290,7 +298,7 @@ class Reporter:
             # ===============================
             # Final Section: Configuration Table
             # ===============================
-            filtered_config = {k: v for k, v in self.config.items() if k in ["env", "policy", "random", "hardware", "obs_scales"]}
+            filtered_config = {k: v for k, v in self.config.items() if k in ["env", "policy", "observation", "random", "hardware"]}
             table_data = self._build_config_rows(filtered_config)
             MAX_ROWS_PER_PAGE = 50
             total_rows = len(table_data)
@@ -321,12 +329,15 @@ class Reporter:
                         cell.set_facecolor("#40466e")
                     else:
                         cell.set_facecolor("#f1f1f2")
-
                         if col == 0:
                             text_str = cell.get_text().get_text().strip()
-                            #  Bold key group headers (e.g., env, policy) for readability
-                            if text_str in ["env", "policy", "random", "hardware", "obs_scales"]:
+                            if text_str in ["env", "policy", "observation", "random", "hardware"]:
                                 cell.set_text_props(fontweight='bold')
+                        elif col == 1:
+                            # If the parameter is observation.stacked_obs_order or observation.non_stacked_obs_order
+                            param_name = table_data[start_idx + row - 1][0].strip()
+                            if any(kw in param_name for kw in ["stacked_obs_order", "non_stacked_obs_order"]):
+                                cell.set_fontsize(7.25)
 
                 pdf.savefig(fig_config)
                 plt.close(fig_config)

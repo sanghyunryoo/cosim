@@ -1,4 +1,4 @@
-<mujoco model="gaia_v1">
+<mujoco model="humanoid_p_v0">
     <compiler angle="radian" />
     <option timestep="0.005" gravity="0 0 -9.807" iterations="50" solver="Newton" jacobian="dense" integrator="implicitfast" />
 
@@ -22,7 +22,7 @@
         </default>
 
         <default class='joints'>
-            <joint damping="10.0" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
+            <joint damping="1.0" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
         </default>
     </default>
 

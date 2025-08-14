@@ -3,29 +3,24 @@ from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.spaces import Box
 import numpy as np
 import mujoco
-from envs.flamingo_v1_5_1.manager.control_manager import ControlManager
-from envs.flamingo_v1_5_1.manager.xml_manager import XMLManager
-from envs.flamingo_v1_5_1.utils.math_utils import MathUtils
-from envs.flamingo_v1_5_1.utils.mujoco_utils import MuJoCoUtils
-from envs.flamingo_v1_5_1.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
+from envs.flamingo_p_v0.manager.control_manager import ControlManager
+from envs.flamingo_p_v0.manager.xml_manager import XMLManager
+from envs.flamingo_p_v0.utils.math_utils import MathUtils
+from envs.flamingo_p_v0.utils.mujoco_utils import MuJoCoUtils
+from envs.flamingo_p_v0.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
 import glfw
 
 
-class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
+class FlamingoPV0(MujocoEnv, utils.EzPickle):
     metadata = {"render_modes": ["human", "rgb_array", "depth_array"]}
     def __init__(self, config, render_flag=True, render_mode='human'):
         # Set Basic Properties
-        self.id = "flamingo_v1_5_1"
+        self.id = "flamingo_p_v0"
         self.config = config
-        self.state_dim = config["env"]["observation_dim"]
-        self.action_dim = config["env"]["action_dim"]
-        self.command_dim = config["env"]["command_dim"]
+        self.action_dim = 8
+        self.action_scaler = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 20.0, 20.0]
         self.render_mode = render_mode
         self.render_flag = render_flag
-        if config["env"]["external_sensors"] == "None":
-            self.use_external_sensors = False
-        else:
-            self.use_external_sensors = True
 
         # PD control parameters
         self.kp_hip = config["hardware"]["Kp_hip"]
@@ -37,8 +32,6 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.kd_leg = config["hardware"]["Kd_leg"]
         self.kd_wheel = config["hardware"]["Kd_wheel"]
 
-        self.action_scaler = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 20.0, 20.0]
-
         # Set Simulation Properties
         precision_level = self.config["random"]["precision"]
         sensor_noise_level = self.config["random"]["sensor_noise"]
@@ -47,24 +40,41 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.frame_skip = config["random_table"]["precision"][precision_level]["frame_skip"]
         self.sensor_noise_map = config["random_table"]["sensor_noise"][sensor_noise_level]
         self.control_freq = 1 / (self.dt_ * self.frame_skip)
+        assert self.control_freq == 50, "Currently, only control frequency of 50 is supported."
         self.local_step = 0
 
         # Set Placeholders
         self.action = np.zeros(self.action_dim)
         self.filtered_action = np.zeros(self.action_dim)
-        self.previous_action = np.zeros(self.action_dim)
+        self.prev_action = np.zeros(self.action_dim)
         self.applied_torques = np.zeros(self.action_dim)
-        self.obs = None
-        self.scaled_obs = None
         self.viewer = None
         self.mode = None
-        if self.use_external_sensors:
-            self.external_obs = {}
-            self.external_obs_freq = float(self.config['env']['external_sensors_Hz'])
 
         # Domain Randomization
         self.xml_manager = XMLManager(config)
         self.model_path = self.xml_manager.get_model_path()
+
+        # Height Map
+        if self.config["observation"]["height_map"] is not None:
+            self.size_x = self.config["observation"]["height_map"]["size_x"]
+            self.size_y = self.config["observation"]["height_map"]["size_y"]
+            self.res_x = self.config["observation"]["height_map"]["res_x"]
+            self.res_y = self.config["observation"]["height_map"]["res_y"]
+        else:
+            self.res_x = 0
+            self.res_y = 0
+
+        # Set dimensions of observations
+        self.obs_to_dim = {
+            "dof_pos": 6,
+            "dof_vel": 8,
+            "ang_vel": 3,
+            "lin_vel": 3,
+            "projected_gravity": 3,
+            "last_action": self.action_dim,
+            "height_map": int(self.res_x * self.res_y)
+        }
 
         # Set MuJoCo Wrapper
         utils.EzPickle.__init__(self)
@@ -72,21 +82,14 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
             self,
             model_path=self.model_path,
             frame_skip=self.frame_skip,
-            observation_space=Box(low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32,),
+            observation_space=Box(low=-np.inf, high=np.inf, shape=(sum(self.obs_to_dim.values()),), dtype=np.float32,),
             render_mode=self.render_mode if render_flag else None,
         )
 
         # Set other Managers and Helpers
         self.control_manager = ControlManager(config)
         self.mujoco_utils = MuJoCoUtils(self.model)
-
-        # Height Map
-        if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            self.x_size = self.config["env"]["height_map"]["x_size"]
-            self.y_size = self.config["env"]["height_map"]["y_size"]
-            self.x_res = self.config["env"]["height_map"]["x_res"]
-            self.y_res = self.config["env"]["height_map"]["y_res"]
-            self.mujoco_utils.init_heightmap_visualization(self.x_res, self.y_res)
+        self.mujoco_utils.init_heightmap_visualization(self.res_x, self.res_y)
 
         # Set Indices of q and qd
         qpos_joint_names = ["left_hip_joint", "right_hip_joint", "left_shoulder_joint", "right_shoulder_joint", "left_leg_joint", "right_leg_joint"]
@@ -95,68 +98,53 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.qd_indices = self.mujoco_utils.get_qvel_joint_indices_by_name(qvel_joint_names)
         
     def _get_obs(self):
-        q = self.data.qpos[self.q_indices]
-        qd = self.data.qvel[self.qd_indices]
+        dof_pos = self.data.qpos[self.q_indices]
+        dof_vel = self.data.qvel[self.qd_indices]
+        ang_vel = self.data.sensor('angular-velocity').data.astype(np.double)
+        lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)
         quat = self.data.sensor('orientation').data[[1, 2, 3, 0]].astype(np.double)
         if np.all(quat == 0):
             quat = np.array([0, 0, 0, 1])
-
-        omega = self.data.sensor('angular-velocity').data.astype(np.double)
         projected_gravity = MathUtils.quat_to_base_vel(quat, np.array([0, 0, -1], dtype=np.double))
-
-        q = truncated_gaussian_noisy_data(q, mean=self.sensor_noise_map["q"]["mean"], std=self.sensor_noise_map["q"]["std"],
-                                          lower=self.sensor_noise_map["q"]["lower"], upper=self.sensor_noise_map["q"]["upper"])
-        qd = truncated_gaussian_noisy_data(qd, mean=self.sensor_noise_map["qd"]["mean"], std=self.sensor_noise_map["qd"]["std"],
-                                          lower=self.sensor_noise_map["qd"]["lower"], upper=self.sensor_noise_map["qd"]["upper"])
-        omega = truncated_gaussian_noisy_data(omega, mean=self.sensor_noise_map["omega"]["mean"], std=self.sensor_noise_map["omega"]["std"],
-                                          lower=self.sensor_noise_map["omega"]["lower"], upper=self.sensor_noise_map["omega"]["upper"])
-        projected_gravity = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"],
-                                          lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
-        obs = np.concatenate([q, qd, omega, projected_gravity])
-        scaled_obs = np.concatenate([q * self.config["obs_scales"]["dof_pos"], qd * self.config["obs_scales"]["dof_vel"], omega * self.config["obs_scales"]["ang_vel"], projected_gravity])
-
-        return obs, scaled_obs
-    
-    def _get_external_obs(self):
-        if not self.use_external_sensors:
-            return None
-
-        base_lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)  # [vx, vy, vz]
-        base_lin_vel = truncated_gaussian_noisy_data(base_lin_vel, mean=self.sensor_noise_map["base_lin_vel"]["mean"], std=self.sensor_noise_map["base_lin_vel"]["std"],
-                                                      lower=self.sensor_noise_map["base_lin_vel"]["lower"], upper=self.sensor_noise_map["base_lin_vel"]["upper"])
-        scaled_base_lin_vel = base_lin_vel * self.config["obs_scales"]["lin_vel"]  # scaled_base_lin_vel
-
-        if self.use_external_sensors and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            height_map = self.mujoco_utils.get_height_map(self.data, self.x_size, self.y_size, self.x_res,self.y_res)  # height_map
-            height_map = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"],
-                                                        lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
+        if self.config["observation"]["height_map"] is not None:
+            height_map = self.mujoco_utils.get_height_map(self.data, self.size_x, self.size_y, self.res_x, self.res_y) 
         else:
             height_map = None
 
-        tick = max(1, int(self.control_freq / self.external_obs_freq))
-        if self.local_step % tick == 0:     
-            self.external_obs["scaled_base_lin_vel"] = scaled_base_lin_vel
-            self.external_obs["height_map"] = height_map
-
-        return self.external_obs
+        dof_pos_noisy = truncated_gaussian_noisy_data(dof_pos, mean=self.sensor_noise_map["dof_pos"]["mean"], std=self.sensor_noise_map["dof_pos"]["std"], lower=self.sensor_noise_map["dof_pos"]["lower"], upper=self.sensor_noise_map["dof_pos"]["upper"])
+        dof_vel_noisy = truncated_gaussian_noisy_data(dof_vel, mean=self.sensor_noise_map["dof_vel"]["mean"], std=self.sensor_noise_map["dof_vel"]["std"], lower=self.sensor_noise_map["dof_vel"]["lower"], upper=self.sensor_noise_map["dof_vel"]["upper"])
+        ang_vel_noisy = truncated_gaussian_noisy_data(ang_vel, mean=self.sensor_noise_map["ang_vel"]["mean"], std=self.sensor_noise_map["ang_vel"]["std"], lower=self.sensor_noise_map["ang_vel"]["lower"], upper=self.sensor_noise_map["ang_vel"]["upper"])
+        lin_vel_noisy = truncated_gaussian_noisy_data(lin_vel, mean=self.sensor_noise_map["lin_vel"]["mean"], std=self.sensor_noise_map["lin_vel"]["std"], lower=self.sensor_noise_map["lin_vel"]["lower"], upper=self.sensor_noise_map["lin_vel"]["upper"])
+        projected_gravity_noisy = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"], lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
+        height_map_noisy = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"], lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
+        
+        return {
+            "dof_pos": dof_pos_noisy,
+            "dof_vel": dof_vel_noisy,
+            "ang_vel": ang_vel_noisy,
+            "lin_vel": lin_vel_noisy,
+            "projected_gravity": projected_gravity_noisy,
+            "height_map": height_map_noisy,
+            "last_action": self.action,
+        }
 
     def step(self, action):
         self.action = action
         self.filtered_action = self.control_manager.delay_filter(action)
 
         # Pull the current joint positions and velocities
-        q = self.data.qpos[self.q_indices]
-        qd = self.data.qvel[self.qd_indices]
+        dof_pos = self.data.qpos[self.q_indices]
+        dof_vel = self.data.qvel[self.qd_indices]
 
         # Extract joint positions and velocities from observation
-        pos_hip = q[0:2]
-        pos_shoulder = q[2:4]
-        pos_leg = q[4:6]
+        pos_hip = dof_pos[0:2]
+        pos_shoulder = dof_pos[2:4]
+        pos_leg = dof_pos[4:6]
 
-        vel_hip = qd[0:2]
-        vel_shoulder = qd[2:4]
-        vel_leg = qd[4:6]
-        vel_wheel = qd[6:8]
+        vel_hip = dof_vel[0:2]
+        vel_shoulder = dof_vel[2:4]
+        vel_leg = dof_vel[4:6]
+        vel_wheel = dof_vel[6:8]
 
         hip_action_scaled = self.filtered_action[0:2] * self.action_scaler[0:2]
         shoulder_action_scaled = self.filtered_action[2:4] * self.action_scaler[2:4]
@@ -176,41 +164,34 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
         self.applied_torques = np.concatenate([hip_torques_clipped, shoulder_torques_clipped, leg_torques_clipped, wheel_torques_clipped])
         self.do_simulation(self.applied_torques, self.frame_skip)
 
-        self.obs, self.scaled_obs = self._get_obs()
+        obs = self._get_obs()
         info = self._get_info()
         terminated = self._is_done()
         truncated = False
 
-        self.previous_action = self.action
+        self.prev_action = self.action
         self.local_step += 1  
 
-        return self.scaled_obs, terminated, truncated, info
+        return obs, terminated, truncated, info
 
     def _get_info(self):
-        q = self.data.qpos[self.q_indices]
-        qd = self.data.qvel[self.qd_indices]
-        cur_state = [q[0], q[1], q[2], q[3], q[4], q[5], qd[6], qd[7]]
+        dof_pos = self.data.qpos[self.q_indices]
+        dof_vel = self.data.qvel[self.qd_indices]
+        ang_vel = self.data.sensor('angular-velocity').data.astype(np.double)
+        lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)
+        cur_state = [dof_pos[0], dof_pos[1], dof_pos[2], dof_pos[3], dof_pos[4], dof_pos[5], dof_vel[6], dof_vel[7]]
 
         info = {
             "dt": self.dt_ * self.frame_skip,
             "action": self.action,
             "torque": self.applied_torques,
-            "action_diff_RMS": np.linalg.norm(self.action - self.previous_action),
-            "lin_vel_x": self.data.sensor('linear-velocity').data.astype(np.float32)[0],
-            "lin_vel_y": self.data.sensor('linear-velocity').data.astype(np.float32)[1],
-            "ang_vel_z": self.obs[16],
-            "pos_z" : self.data.qpos[2],
-            "ang_roll" :  self.obs[17],
-            "ang_pitch":  self.obs[18],
+            "action_diff_RMS": np.linalg.norm(self.action - self.prev_action),
+            "lin_vel_x": lin_vel[0],
+            "lin_vel_y": lin_vel[1],
+            "ang_vel_z": ang_vel[2],
             "set_points": self.action * self.action_scaler,
             "cur_state": cur_state
         }
-
-        self.external_obs = self._get_external_obs()
-        if self.external_obs is not None:
-            info['scaled_base_lin_vel'] = self.external_obs['scaled_base_lin_vel']
-            info['height_map'] = self.external_obs['height_map']
-
         return info
 
     def _get_reset_info(self):
@@ -242,9 +223,8 @@ class FlamingoV1_5_1(MujocoEnv, utils.EzPickle):
 
         mujoco.mj_forward(self.model, self.data)
 
-        self.obs, self.scaled_obs = self._get_obs()
-        
-        return self.scaled_obs
+        obs = self._get_obs()  
+        return obs
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)

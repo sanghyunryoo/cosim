@@ -12,7 +12,7 @@ class XMLManager:
         self.precision_attr_map = config["random_table"]["precision"]
 
     def get_model_path(self):
-        original_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'flamingo_light_proto_v1.xml')
+        original_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'flamingo_light_p_v0.xml')
         tree = ET.parse(original_model_path)
         root = tree.getroot()
 
@@ -79,9 +79,9 @@ class XMLManager:
 
 
         # 7. Initialize spheres for height map
-        if self.config["env"]["external_sensors"] != "None" and self.config["env"]["external_sensors"] in ['height_map', 'All']:
-            x_res = self.config["env"]["height_map"]["x_res"]
-            y_res = self.config["env"]["height_map"]["y_res"]
+        if self.config["observation"]["height_map"] is not None:
+            res_x = self.config["observation"]["height_map"]["res_x"]
+            res_y = self.config["observation"]["height_map"]["res_y"]
 
             # Find <worldbody> and then <body name="base_link">
             worldbody = root.find('worldbody')
@@ -95,8 +95,8 @@ class XMLManager:
                 raise ValueError("Could not find <body name='base_link'> in the XML file.")
 
             # Add <site> elements
-            for i in range(y_res):
-                for j in range(x_res):
+            for i in range(res_y):
+                for j in range(res_x):
                     site_name = f"heightmap_site_{i}_{j}"
                     site_element = ET.Element('site', {
                         'name': site_name,
@@ -108,7 +108,7 @@ class XMLManager:
                     })
                     base_link.append(site_element)
 
-        randomized_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'applied_flamingo_light_proto_v1.xml')
+        randomized_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'applied_flamingo_light_p_v0.xml')
         tree.write(randomized_model_path)
         return randomized_model_path
 

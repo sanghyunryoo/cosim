@@ -1,84 +1,117 @@
-"flamingo_light_proto_v1":
-  "env":
-    "observation_dim": "12"
-    "action_dim": "4"
-    "command_dim": "3"
-    "command_3_initial": "0.261"
+# obs fields: ["dof_pos", "dof_vel", "lin_vel", "ang_vel", "projected_gravity", "height_map", "last_action"]
+
+"flamingo_light_p_v0":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stack_size": 3
+  "non_stacked_obs_order": []
   "obs_scales":
     "lin_vel": 1.0
     "ang_vel": 1.0
     "dof_pos": 1.0
     "dof_vel": 1.0
-    "scale_commands": True
+  "command":
+    "command_dim": 3
+    "command_3_initial": 0.261
+  "command_scales":
+    "0": 1.0
+    "1": 1.0
+    "2": 1.0
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
   "hardware":
-    "Kp_shoulder": "50"
-    "Kd_shoulder": "1.5"
-    "Kd_wheel": "0.2"
-    "joint_max_torque": "12"
-    "wheel_max_torque": "12"
+    "Kp_shoulder": 50
+    "Kd_shoulder": 1.5
+    "Kd_wheel": 0.2
+    "joint_max_torque": 12
+    "wheel_max_torque": 12
     
 
-"flamingo_v1_5_1":
-  "env":
-    "observation_dim": "20"
-    "action_dim": "8"
-    "command_dim": "4"
-    "command_3_initial": "0.363"
+"flamingo_p_v0":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stack_size": 3
+  "non_stacked_obs_order": []
   "obs_scales":
     "lin_vel": 2.0
     "ang_vel": 0.25
     "dof_pos": 1.0
     "dof_vel": 0.15
-    "scale_commands": True
+  "command":
+    "command_dim": 4
+    "command_3_initial": 0.363
+  "command_scales":
+    "0": 2.0
+    "1": 2.0
+    "2": 0.25
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
+  "height_map":
+    "size_x": 1.0
+    "size_y": 0.6
+    "res_x": 15
+    "res_y": 9
   "hardware":
-    "Kp_hip": "100"
-    "Kp_shoulder": "100"
-    "Kp_leg": "150"
-    "Kd_hip": "1.5"
-    "Kd_shoulder": "1.5"
-    "Kd_leg": "2"
-    "Kd_wheel": "0.5"
-    "joint_max_torque": "45"
-    "wheel_max_torque": "45"
+    "Kp_hip": 100
+    "Kp_shoulder": 100
+    "Kp_leg": 150
+    "Kd_hip": 1.5
+    "Kd_shoulder": 1.5
+    "Kd_leg": 2
+    "Kd_wheel": 0.5
+    "joint_max_torque": 45
+    "wheel_max_torque": 45
 
 
-"gaia_v1":
-  "env":
-    "observation_dim": "52"
-    "action_dim": "23"
-    "command_dim": "4"
-    "command_3_initial": "1.105"
+"humanoid_p_v0":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stack_size": 3
+  "non_stacked_obs_order": ["lin_vel"]
   "obs_scales":
     "lin_vel": 2.0
     "ang_vel": 0.25
     "dof_pos": 1.0
     "dof_vel": 0.15
-    "scale_commands": True
+  "command":
+    "command_dim": 4
+    "command_3_initial": 1.105
+  "command_scales":
+    "0": 2.0
+    "1": 2.0
+    "2": 0.25
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
+  "height_map":
+    "size_x": 1.0
+    "size_y": 0.6
+    "res_x": 15
+    "res_y": 9
   "hardware":
-    "Kp_hip_pitch": "200"
-    "Kp_torso": "100"
-    "Kp_hip_roll": "150"
-    "Kp_shoulder_pitch": "30"
-    "Kp_hip_yaw": "150"
-    "Kp_shoulder_roll": "30"
-    "Kp_knee": "200"
-    "Kp_shoulder_yaw": "10"
-    "Kp_ankle_pitch": "40"
-    "Kp_elbow_pitch": "20"
-    "Kp_ankle_roll": "40"
-    "Kp_elbow_yaw": "10"
-    "Kd_hip_pitch": "5"
-    "Kd_torso": "2"
-    "Kd_hip_roll": "5"
-    "Kd_shoulder_pitch": "3"
-    "Kd_hip_yaw": "5"
-    "Kd_shoulder_roll": "3"
-    "Kd_knee": "5"
-    "Kd_shoulder_yaw": "1"
-    "Kd_ankle_pitch": "4"
-    "Kd_elbow_pitch": "2"
-    "Kd_ankle_roll": "4"
-    "Kd_elbow_yaw": "1"
-    "legs_joint_max_torque": "300"
-    "feet_joint_max_torque": "200"
-    "arms_joint_max_torque": "150"
+    "Kp_hip_pitch": 200
+    "Kp_torso": 100
+    "Kp_hip_roll": 150
+    "Kp_shoulder_pitch": 30
+    "Kp_hip_yaw": 150
+    "Kp_shoulder_roll": 30
+    "Kp_knee": 200
+    "Kp_shoulder_yaw": 10
+    "Kp_ankle_pitch": 40
+    "Kp_elbow_pitch": 20
+    "Kp_ankle_roll": 40
+    "Kp_elbow_yaw": 10
+    "Kd_hip_pitch": 5
+    "Kd_torso": 2
+    "Kd_hip_roll": 5
+    "Kd_shoulder_pitch": 3
+    "Kd_hip_yaw": 5
+    "Kd_shoulder_roll": 3
+    "Kd_knee": 5
+    "Kd_shoulder_yaw": 1
+    "Kd_ankle_pitch": 4
+    "Kd_elbow_pitch": 2
+    "Kd_ankle_roll": 4
+    "Kd_elbow_yaw": 1
+    "legs_joint_max_torque": 300
+    "feet_joint_max_torque": 200
+    "arms_joint_max_torque": 150
