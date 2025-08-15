@@ -531,6 +531,7 @@ class MainWindow(QMainWindow):
         self.command_initial_value_le_list = []
         self.command_timer = None
         self.hardware_settings = {}
+        self.hardware_settings_by_env = {}
 
         # Whether the user manually changed observation settings via dialog (kept for reference; cache now used)
         self.observation_overridden_by_user = False
@@ -627,9 +628,31 @@ class MainWindow(QMainWindow):
         # Sync current observation_settings with latest cache
         self.observation_settings = (self.obs_settings_by_env[env_id]).copy()
 
+
+    # ---------------- per-env hardware helpers (like observation) ----------------
+    def _make_hardware_defaults(self, env_id: str):
+        """Build default hardware settings for the env from YAML (shallow copy)."""
+        env_cfg = self.env_config.get(env_id, {}) or {}
+        hw = env_cfg.get("hardware", {}) or {}
+        # 문자열 유지 (대화상자에서 편집), 숫자 변환은 _gather_config에서 수행
+        return hw.copy()
+
+    def _ensure_hardware_defaults(self):
+        """Ensure current env has cached hardware settings and sync self.hardware_settings."""
+        env_id = self.env_id_cb.currentText()
+        if env_id not in self.hardware_settings_by_env:
+            self.hardware_settings_by_env[env_id] = self._make_hardware_defaults(env_id)
+        self.hardware_settings = (self.hardware_settings_by_env[env_id]).copy()
+        
+
     def update_defaults(self, new_env_id):
         settings = self.env_config.get(new_env_id, {}) or {}
-        self.hardware_settings = (settings.get("hardware", {}) or {}).copy()
+        if new_env_id in self.hardware_settings_by_env:
+            self.hardware_settings = (self.hardware_settings_by_env[new_env_id]).copy()
+        else:
+            self.hardware_settings = self._make_hardware_defaults(new_env_id)
+            self.hardware_settings_by_env[new_env_id] = (self.hardware_settings).copy()
+
         cmd_cfg = settings.get("command", {}) if isinstance(settings.get("command", {}), dict) else {}
 
         # UI upper bounds (example retained)
@@ -1093,9 +1116,13 @@ class MainWindow(QMainWindow):
             self.policy_file_le.setText(file_path)
 
     def open_hardware_settings(self):
-        dialog = HardwareSettingsDialog(self.hardware_settings, self)
+        env_id = self.env_id_cb.currentText()
+        self._ensure_hardware_defaults()
+        dialog = HardwareSettingsDialog((self.hardware_settings).copy(), self)
         if dialog.exec_() == QDialog.Accepted:
             self.hardware_settings = dialog.get_settings()
+            # NEW: save back to per-env cache so it persists after env switches
+            self.hardware_settings_by_env[env_id] = (self.hardware_settings).copy()
 
     def open_observation_settings(self):
         # Open the dialog with the latest settings for the current env
@@ -1114,6 +1141,7 @@ class MainWindow(QMainWindow):
     def start_test(self):
         # Ensure latest settings for the current env
         self._ensure_observation_defaults()
+        self._ensure_hardware_defaults()
 
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -1149,6 +1177,7 @@ class MainWindow(QMainWindow):
 
     def _gather_config(self):
         try:
+            self._ensure_hardware_defaults()
             # hardware: convert numeric strings to float where applicable
             hardware_numeric = {k: to_float(v, v) for k, v in self.hardware_settings.items()}
 

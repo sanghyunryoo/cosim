@@ -238,18 +238,18 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         dof_pos = self.data.qpos[self.q_indices]
         ang_vel = self.data.sensor('angular-velocity').data.astype(np.double)
         lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)
-        cur_state = dof_pos
+        joint_state = dof_pos
 
         info = {
             "dt": self.dt_ * self.frame_skip,
             "action": self.action,
+            "action_diff_RMSE": np.sqrt(np.mean((self.action - self.prev_action)**2)),
             "torque": self.applied_torques,
-            "action_diff_RMS": np.linalg.norm(self.action - self.prev_action),
             "lin_vel_x": lin_vel[0],
             "lin_vel_y": lin_vel[1],
             "ang_vel_z": ang_vel[2],
             "set_points": self.action * self.action_scaler,
-            "cur_state": cur_state
+            "state": joint_state
         }
         return info
 
