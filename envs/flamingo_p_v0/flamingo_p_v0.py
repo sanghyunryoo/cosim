@@ -156,9 +156,9 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
         leg_torques = self.control_manager.pd_controller(self.kp_leg, leg_action_scaled, pos_leg, self.kd_leg, 0.0, vel_leg)
         wheel_torques = self.control_manager.pd_controller(0.0, 0.0, 0.0, self.kd_wheel, wheel_action_scaled, vel_wheel)
 
-        hip_torques_clipped = np.clip(hip_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
-        shoulder_torques_clipped = np.clip(shoulder_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
-        leg_torques_clipped = np.clip(leg_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
+        hip_torques_clipped = np.clip(hip_torques, -self.config['hardware']['leg_max_torque'], self.config['hardware']['leg_max_torque'])
+        shoulder_torques_clipped = np.clip(shoulder_torques, -self.config['hardware']['leg_max_torque'], self.config['hardware']['leg_max_torque'])
+        leg_torques_clipped = np.clip(leg_torques, -self.config['hardware']['leg_max_torque'], self.config['hardware']['leg_max_torque'])
         wheel_torques_clipped = np.clip(wheel_torques, -self.config['hardware']['wheel_max_torque'], self.config['hardware']['wheel_max_torque'])
 
         self.applied_torques = np.concatenate([hip_torques_clipped, shoulder_torques_clipped, leg_torques_clipped, wheel_torques_clipped])

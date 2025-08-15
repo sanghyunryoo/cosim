@@ -22,7 +22,7 @@
         </default>
 
         <default class='joints'>
-            <joint damping="1.0" stiffness="0.0" frictionloss="0.1" armature="0.01" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
+            <joint damping="1.0" stiffness="0.0" frictionloss="0.1" armature="0.1" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
         </default>
     </default>
 
@@ -114,7 +114,7 @@
                 <body name="left_ankle_roll_link" quat="-0.500004 0.499996 -0.500002 -0.499998">
                   <inertial pos="0.00000029 0.02127772 -0.02280977" quat="0.50823593 -0.49162612 -0.49162612 0.50823593" mass="1.03752000" diaginertia="0.00090987 0.00358313 0.00382703" />
                   <joint name="left_ankle_roll_joint" pos="0 0 0" axis="0 0 1" range="-0.3 0.3" class='joints' />
-                  <geom type="mesh" rgba="0.2 0.2 0.2 1" mesh="left_ankle_roll_link" />
+                  <geom type="mesh" rgba="0.2 0.2 0.2 1" mesh="left_ankle_roll_link" friction="0.8 0.02 0.01" />
                 </body>
               </body>
             </body>
@@ -143,7 +143,7 @@
                 <body name="right_ankle_roll_link" quat="0.500198 0.4998 0.5002 -0.499802">
                   <inertial pos="-0.00008565 -0.02136201 -0.02279415" quat="0.49189185 -0.50796193 0.50850978 -0.49136023" mass="1.03752000" diaginertia="0.00090987 0.00358313 0.00382703" />
                   <joint name="right_ankle_roll_joint" pos="0 0 0" axis="0 0 -1" range="-0.3 0.3" class='joints' />
-                  <geom type="mesh" rgba="0.2 0.2 0.2 1" mesh="right_ankle_roll_link" />
+                  <geom type="mesh" rgba="0.2 0.2 0.2 1" mesh="right_ankle_roll_link" friction="0.8 0.02 0.01"/>
                 </body>
               </body>
             </body>

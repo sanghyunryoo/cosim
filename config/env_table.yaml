@@ -23,7 +23,7 @@
     "Kp_shoulder": 50
     "Kd_shoulder": 1.5
     "Kd_wheel": 0.2
-    "joint_max_torque": 12
+    "leg_max_torque": 12
     "wheel_max_torque": 12
     
 
@@ -59,7 +59,7 @@
     "Kd_shoulder": 1.5
     "Kd_leg": 2
     "Kd_wheel": 0.5
-    "joint_max_torque": 45
+    "leg_max_torque": 45
     "wheel_max_torque": 45
 
 
@@ -112,6 +112,15 @@
     "Kd_elbow_pitch": 2
     "Kd_ankle_roll": 4
     "Kd_elbow_yaw": 1
-    "legs_joint_max_torque": 300
-    "feet_joint_max_torque": 200
-    "arms_joint_max_torque": 150
+    "hip_roll_joint_max_torque": 200
+    "hip_pitch_joint_max_torque": 200
+    "hip_yaw_joint_max_torque": 200
+    "knee_joint_max_torque": 300
+    "torso_joint_max_torque": 200
+    "ankle_roll_joint_max_torque": 40
+    "ankle_pitch_joint_max_torque": 40
+    "shoulder_roll_joint_max_torque": 40
+    "shoulder_pitch_joint_max_torque": 40
+    "shoulder_yaw_joint_max_torque": 18
+    "elbow_pitch_joint_max_torque": 18
+    "elbow_yaw_joint_max_torque": 18

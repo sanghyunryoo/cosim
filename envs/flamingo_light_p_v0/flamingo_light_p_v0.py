@@ -143,7 +143,7 @@ class FlamingoLightPV0(MujocoEnv, utils.EzPickle):
         shoulder_torques = self.control_manager.pd_controller(self.kp_shoulder, shoulder_action_scaled, pos_shoulder, self.kd_shoulder, 0.0, vel_shoulder)
         wheel_torques = self.control_manager.pd_controller(0.0, 0.0, 0.0, self.kd_wheel, wheel_action_scaled, vel_wheel)
 
-        shoulder_torques_clipped = np.clip(shoulder_torques, -self.config['hardware']['joint_max_torque'], self.config['hardware']['joint_max_torque'])
+        shoulder_torques_clipped = np.clip(shoulder_torques, -self.config['hardware']['leg_max_torque'], self.config['hardware']['leg_max_torque'])
         wheel_torques_clipped = np.clip(wheel_torques, -self.config['hardware']['wheel_max_torque'], self.config['hardware']['wheel_max_torque'])
 
         self.applied_torques = np.concatenate([shoulder_torques_clipped, wheel_torques_clipped])

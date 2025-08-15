@@ -59,9 +59,9 @@ class XMLManager:
                             randomized_mass += self.config["random"]["load"]
                         inertial.attrib['mass'] = str(randomized_mass)
 
-        # 4. Set the friction of wheel geoms in left_ankle_pitch_joint and right_ankle_pitch_joint
+        # 4. Set the friction of wheel geoms in left_ankle_roll_link and right_ankle_roll_link
         for body in root.findall('.//body'):
-            if body.attrib.get('name') in ['left_ankle_pitch_joint', 'right_ankle_pitch_joint']:
+            if body.attrib.get('name') in ['left_ankle_roll_link', 'right_ankle_roll_link']:
                 for geom in body.findall('geom'):
                     if 'friction' in geom.attrib:
                         geom.attrib['friction'] = (

@@ -18,7 +18,7 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         self.id = "humanoid_p_v0"
         self.config = config
         self.action_dim = 23
-        self.action_scaler = np.ones(self.action_dim) * 0.5
+        self.action_scaler = np.ones(self.action_dim) * 1.0
         self.render_mode = render_mode
         self.render_flag = render_flag
 
@@ -205,18 +205,18 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         ankle_roll_torques = self.control_manager.pd_controller(self.kp_ankle_roll, ankle_roll_action_scaled, pos_ankle_roll, self.kd_ankle_roll, 0.0, vel_ankle_roll)
         elbow_yaw_torques = self.control_manager.pd_controller(self.kp_elbow_yaw, elbow_yaw_action_scaled, pos_elbow_yaw, self.kd_elbow_yaw, 0.0, vel_elbow_yaw)
 
-        hip_pitch_torques_clipped = np.clip(hip_pitch_torques, -self.config['hardware']['legs_joint_max_torque'], self.config['hardware']['legs_joint_max_torque'])
-        torso_torques_clipped = np.clip(torso_torques, -self.config['hardware']['legs_joint_max_torque'], self.config['hardware']['legs_joint_max_torque'])
-        hip_roll_torques_clipped = np.clip(hip_roll_torques, -self.config['hardware']['legs_joint_max_torque'], self.config['hardware']['legs_joint_max_torque'])
-        shoulder_pitch_torques_clipped = np.clip(shoulder_pitch_torques, -self.config['hardware']['arms_joint_max_torque'], self.config['hardware']['arms_joint_max_torque'])
-        hip_yaw_torques_clipped = np.clip(hip_yaw_torques, -self.config['hardware']['legs_joint_max_torque'], self.config['hardware']['legs_joint_max_torque'])
-        shoulder_roll_torques_clipped = np.clip(shoulder_roll_torques, -self.config['hardware']['arms_joint_max_torque'], self.config['hardware']['arms_joint_max_torque'])
-        knee_torques_clipped = np.clip(knee_torques, -self.config['hardware']['legs_joint_max_torque'], self.config['hardware']['legs_joint_max_torque'])
-        shoulder_yaw_torques_clipped = np.clip(shoulder_yaw_torques, -self.config['hardware']['arms_joint_max_torque'], self.config['hardware']['arms_joint_max_torque'])
-        ankle_pitch_torques_clipped = np.clip(ankle_pitch_torques, -self.config['hardware']['feet_joint_max_torque'], self.config['hardware']['feet_joint_max_torque'])
-        elbow_pitch_torques_clipped = np.clip(elbow_pitch_torques, -self.config['hardware']['arms_joint_max_torque'], self.config['hardware']['arms_joint_max_torque'])
-        ankle_roll_torques_clipped = np.clip(ankle_roll_torques, -self.config['hardware']['feet_joint_max_torque'], self.config['hardware']['feet_joint_max_torque'])
-        elbow_yaw_torques_clipped = np.clip(elbow_yaw_torques, -self.config['hardware']['arms_joint_max_torque'], self.config['hardware']['arms_joint_max_torque'])
+        hip_pitch_torques_clipped = np.clip(hip_pitch_torques, -self.config['hardware']['hip_pitch_joint_max_torque'], self.config['hardware']['hip_pitch_joint_max_torque'])
+        torso_torques_clipped = np.clip(torso_torques, -self.config['hardware']['torso_joint_max_torque'], self.config['hardware']['torso_joint_max_torque'])
+        hip_roll_torques_clipped = np.clip(hip_roll_torques, -self.config['hardware']['hip_roll_joint_max_torque'], self.config['hardware']['hip_roll_joint_max_torque'])
+        shoulder_pitch_torques_clipped = np.clip(shoulder_pitch_torques, -self.config['hardware']['shoulder_pitch_joint_max_torque'], self.config['hardware']['shoulder_pitch_joint_max_torque'])
+        hip_yaw_torques_clipped = np.clip(hip_yaw_torques, -self.config['hardware']['hip_yaw_joint_max_torque'], self.config['hardware']['hip_yaw_joint_max_torque'])
+        shoulder_roll_torques_clipped = np.clip(shoulder_roll_torques, -self.config['hardware']['shoulder_roll_joint_max_torque'], self.config['hardware']['shoulder_roll_joint_max_torque'])
+        knee_torques_clipped = np.clip(knee_torques, -self.config['hardware']['knee_joint_max_torque'], self.config['hardware']['knee_joint_max_torque'])
+        shoulder_yaw_torques_clipped = np.clip(shoulder_yaw_torques, -self.config['hardware']['shoulder_yaw_joint_max_torque'], self.config['hardware']['shoulder_yaw_joint_max_torque'])
+        ankle_pitch_torques_clipped = np.clip(ankle_pitch_torques, -self.config['hardware']['ankle_pitch_joint_max_torque'], self.config['hardware']['ankle_pitch_joint_max_torque'])
+        elbow_pitch_torques_clipped = np.clip(elbow_pitch_torques, -self.config['hardware']['elbow_pitch_joint_max_torque'], self.config['hardware']['elbow_pitch_joint_max_torque'])
+        ankle_roll_torques_clipped = np.clip(ankle_roll_torques, -self.config['hardware']['ankle_roll_joint_max_torque'], self.config['hardware']['ankle_roll_joint_max_torque'])
+        elbow_yaw_torques_clipped = np.clip(elbow_yaw_torques, -self.config['hardware']['elbow_yaw_joint_max_torque'], self.config['hardware']['elbow_yaw_joint_max_torque'])
 
         self.applied_torques = np.concatenate([hip_pitch_torques_clipped, torso_torques_clipped, hip_roll_torques_clipped, shoulder_pitch_torques_clipped,
         hip_yaw_torques_clipped, shoulder_roll_torques_clipped,  knee_torques_clipped, shoulder_yaw_torques_clipped, ankle_pitch_torques_clipped,

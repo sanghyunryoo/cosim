@@ -72,23 +72,42 @@ class HardwareSettingsDialog(QDialog):
         self._setup_ui()
 
     def _setup_ui(self):
-        layout = QFormLayout(self)
+        # Main vertical layout for the dialog
+        main_layout = QVBoxLayout(self)
+
+        # Create a scroll area to allow scrolling when height exceeds limit
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)  # Allow resizing of the scroll area content
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Hide horizontal scrollbar
+
+        # Create an inner widget that will hold the form layout
+        inner_widget = QWidget()
+        form_layout = QFormLayout(inner_widget)
         self.fields = {}
+
         # Build editable fields for each hardware setting
         for key, value in self.hardware_settings.items():
             label = QLabel(key)
             le = QLineEdit(str(value))
-            le.setValidator(QDoubleValidator())
-            layout.addRow(label, le)
+            le.setValidator(QDoubleValidator())  # Allow only floating-point input
+            form_layout.addRow(label, le)
             self.fields[key] = le
-        # OK / Cancel
+
+        # Set the inner widget inside the scroll area
+        scroll.setWidget(inner_widget)
+        main_layout.addWidget(scroll)
+
+        # OK / Cancel buttons at the bottom
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        buttons.accepted.connect(self.accept)   # Close dialog with "Accepted" state
+        buttons.rejected.connect(self.reject)   # Close dialog with "Rejected" state
+        main_layout.addWidget(buttons)
+
+        # Set maximum height to 500px; scrolling will be enabled if exceeded
+        self.setMaximumHeight(600)
 
     def get_settings(self):
-        # Return current field values as a dict of strings
+        # Return current field values as a dictionary
         return {key: le.text() for key, le in self.fields.items()}
 
 # ---------------------------
