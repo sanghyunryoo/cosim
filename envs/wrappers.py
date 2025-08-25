@@ -108,11 +108,11 @@ class StateBuildWrapper(BaseEnv):
         # Ordered observation keys that will NOT be stacked (single-frame)
         self.non_stacked_obs_order = list(self.config["observation"]["non_stacked_obs_order"])
 
-        # Cache dimensions
+        # Cache dimensions   
         self._stacked_obs_dim = sum(self.env.obs_to_dim[n] for n in self.stacked_obs_order)
         self._non_stacked_obs_dim = sum(self.env.obs_to_dim[n] for n in self.non_stacked_obs_order)
         self.state_dim = self.stack_size * self._stacked_obs_dim + self._non_stacked_obs_dim
-
+  
         # Rolling buffer for stacked observations (shape: [stack_size, stacked_obs_dim])
         self.obs_buffer = np.zeros((self.stack_size, self._stacked_obs_dim), dtype=np.float32)
 
@@ -340,14 +340,14 @@ class CommandWrapper(BaseEnv):
         next_state = np.concatenate((next_state, self.applied_command))
 
         if self.command_dim == 2:
-            info["lin_vel_x_command"] = self.user_command[0]
-            info["ang_vel_z_command"] = self.user_command[1]
+            info["user_command_0"] = self.user_command[0]
+            info["user_command_1"] = self.user_command[1]
         elif self.command_dim > 2:
-            info["lin_vel_x_command"] = self.user_command[0]
-            info["lin_vel_y_command"] = self.user_command[1]
-            info["ang_vel_z_command"] = self.user_command[2]
+            info["user_command_0"] = self.user_command[0]
+            info["user_command_1"] = self.user_command[1]
+            info["user_command_2"] = self.user_command[2]
         else:
-            raise ValueError(f"Invalid 'command_dim': expected 2 (lin_vel_x, ang_vel_z) or >= 3 (lin_vel_x, lin_vel_y, ang_vel_z, ... ); but got {self.command_dim}.")
+            raise ValueError(f"Invalid 'command_dim': expected 2  or >= 3; but got {self.command_dim}.")
 
         if terminated or truncated:
             self.reset_flag = False

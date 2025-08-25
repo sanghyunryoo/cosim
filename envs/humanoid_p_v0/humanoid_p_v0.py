@@ -86,8 +86,12 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         self.obs_to_dim = {
             "dof_pos": 23,
             "dof_vel": 23,
-            "ang_vel": 3,
-            "lin_vel": 3,
+            "ang_vel_roll": 1,
+            "ang_vel_pitch": 1,
+            "ang_vel_yaw": 1,
+            "lin_vel_x": 1,
+            "lin_vel_y": 1,
+            "lin_vel_z": 1,
             "projected_gravity": 3,
             "last_action": self.action_dim,
             "height_map": int(self.res_x * self.res_y)
@@ -149,8 +153,12 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         return {
             "dof_pos": dof_pos_noisy,
             "dof_vel": dof_vel_noisy,
-            "ang_vel": ang_vel_noisy,
-            "lin_vel": lin_vel_noisy,
+            "ang_vel_roll": ang_vel_noisy[0],
+            "ang_vel_pitch": ang_vel_noisy[1],
+            "ang_vel_yaw": ang_vel_noisy[2],
+            "lin_vel_x": lin_vel_noisy[0],
+            "lin_vel_y": lin_vel_noisy[1],
+            "lin_vel_z": lin_vel_noisy[2],
             "projected_gravity": projected_gravity_noisy,
             "height_map": height_map_noisy,
             "last_action": self.action
@@ -247,7 +255,7 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
             "torque": self.applied_torques,
             "lin_vel_x": lin_vel[0],
             "lin_vel_y": lin_vel[1],
-            "ang_vel_z": ang_vel[2],
+            "ang_vel_yaw": ang_vel[2],
             "set_points": self.action * self.action_scaler,
             "state": joint_state
         }

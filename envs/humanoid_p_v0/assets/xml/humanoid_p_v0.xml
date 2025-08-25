@@ -22,7 +22,7 @@
         </default>
 
         <default class='joints'>
-            <joint damping="1.0" stiffness="0.0" frictionloss="0.1" armature="0.1" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
+            <joint damping="1.0" stiffness="0.0" frictionloss="0.1" armature="0.05" actuatorfrclimited="true" actuatorfrcrange="-1000 1000"/>
         </default>
     </default>
 

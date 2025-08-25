@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('Agg')  # Suppress GUI backend warning
+matplotlib.use('Agg')  # Use non-interactive backend for PDF export
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle, FancyBboxPatch
@@ -8,8 +8,9 @@ import numpy as np
 import math
 import time
 from cycler import cycler
+import textwrap  # For wrapping long strings in table cells
 
-# Use seaborn whitegrid style and set a clean color palette (excluding yellow)
+# Global Matplotlib style (clean, readable for PDF)
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams.update({
     'font.family': 'sans-serif',
@@ -32,7 +33,7 @@ plt.rcParams.update({
     'figure.subplot.top': 0.95,
     'pdf.fonttype': 42,
     'ps.fonttype': 42,
-    # Color palette (excluding yellow)
+    # Color palette (avoid yellow)
     'axes.prop_cycle': cycler('color', [
         '#E15759',  # red
         '#4E79A7',  # blue
@@ -42,22 +43,19 @@ plt.rcParams.update({
     ])
 })
 
-# Default marker size for plots
+# Default marker size for time-series plots
 DEFAULT_MARKER_SIZE = 1
 
 
 def add_section_header(fig, title, *, banner_height=0.06, page_num=None):
     """
-    Draw a slim, dark banner at the top of the figure with a white, bold title.
-    Keeps the rest of the figure intact.
+    Draw a slim banner on top of the figure with a white, bold title.
     """
     header_color = "#0F172A"  # slate-900
-    # Banner strip across the top
     fig.add_artist(Rectangle(
         (0, 1.0 - banner_height), 1.0, banner_height,
         transform=fig.transFigure, color=header_color, zorder=1000
     ))
-    # Title text (white with subtle stroke)
     fig.text(
         0.06, 1.0 - banner_height / 2.0, title,
         ha="left", va="center",
@@ -65,7 +63,6 @@ def add_section_header(fig, title, *, banner_height=0.06, page_num=None):
         path_effects=[pe.withStroke(linewidth=2, foreground="black", alpha=0.15)],
         zorder=1001
     )
-    # Small page number on the far right
     if page_num is not None:
         fig.text(
             0.98, 1.0 - banner_height / 2.0, str(page_num),
@@ -74,14 +71,15 @@ def add_section_header(fig, title, *, banner_height=0.06, page_num=None):
             path_effects=[pe.withStroke(linewidth=1, foreground="black", alpha=0.15)],
             zorder=1001
         )
-    
+
+
 class Reporter:
     def __init__(self, report_path, config):
         """
-        Initializes the reporter with a PDF output path and configuration.
-        Parameters:
-            report_path (str): Path to save the PDF report.
-            config (dict): Dictionary containing configuration values.
+        Initialize a report generator.
+        Args:
+            report_path: Output PDF path.
+            config: Dict of configuration for rendering the 'Configuration' table.
         """
         self.report_path = report_path
         self.config = config
@@ -90,9 +88,7 @@ class Reporter:
 
     def write_info(self, info):
         """
-        Logs a dictionary of key-value pairs at each timestep.
-        Parameters:
-            info (dict): Logged data such as {'dt': 0.1, 'action': [...], ...}
+        Append one timestep of logged info.
         """
         self.timesteps += 1
         for key, value in info.items():
@@ -102,11 +98,11 @@ class Reporter:
 
     def _build_config_rows(self, config, indent=0):
         """
-        Converts a nested config dictionary into flat rows for a parameter table.
-        Applies indentation for nested keys.
+        Flatten nested dict into 2-column rows: [Parameter, Value].
+        Indentation is represented by 4 spaces per nesting level.
         """
         rows = []
-        indent_str = "    " * indent  # Indent with 4 spaces for each level
+        indent_str = "    " * indent
         for key, value in config.items():
             if isinstance(value, dict):
                 rows.append([f"{indent_str}{key}", ""])
@@ -118,23 +114,42 @@ class Reporter:
                 rows.append([f"{indent_str}{key}", str(value)])
         return rows
 
+    def _wrap_long_text(self, s: str, *, width=38, max_lines=8):
+        """
+        Wrap a long string to a fixed width. If it exceeds max_lines,
+        trim and add a tail marker like: '… (+N more)'.
+        """
+        if not isinstance(s, str):
+            s = str(s)
+        wrapped_lines = textwrap.wrap(s, width=width, break_long_words=False, break_on_hyphens=False)
+        if len(wrapped_lines) <= max_lines:
+            return "\n".join(wrapped_lines), len(wrapped_lines)
+        hidden = len(wrapped_lines) - max_lines
+        trimmed = wrapped_lines[:max_lines] + [f"… (+{hidden} more)"]
+        return "\n".join(trimmed), len(trimmed)
+
     def generate_report(self):
         """
-        Generates a multi-page PDF report summarizing logged data and configuration.
-        The report includes plots and tables formatted for A4 portrait pages.
+        Build the multi-page PDF report.
         """
-        PAGE_SIZE = (8.27, 11.69)  # A4 size in inches
+        PAGE_SIZE = (8.27, 11.69)  # A4 portrait
         dt = float(self.history.get('dt', [1])[0])
         times = np.arange(self.timesteps) * dt
 
+        # Safe defaults for page counts
+        PAGE_NUM_IN_SECTION_1 = 0
+        PAGE_NUM_IN_SECTION_2 = 0
+        PAGE_NUM_IN_SECTION_3 = 0
+
         with PdfPages(self.report_path) as pdf:
-            # ===============================
-            # Cover Page (unchanged)
-            # ===============================
+            # -------------------------------
+            # Cover page
+            # -------------------------------
             fig_cover = plt.figure(figsize=PAGE_SIZE)
             bg_ax = fig_cover.add_axes([0, 0, 1, 1], zorder=0)
             bg_ax.axis("off")
 
+            # Soft vertical gradient background
             h, w = 800, 1200
             top_rgb = np.array([246, 248, 252]) / 255.0
             bottom_rgb = np.array([230, 236, 255]) / 255.0
@@ -195,7 +210,7 @@ class Reporter:
             fig_cover.add_artist(Rectangle((0.08, 0.605), 0.84, 0.002, color="#CBD5E1", zorder=1))
 
             description = (
-                "This report presents a comprehensive overview of key performance metrics,\n"
+                "This report presents a concise overview of key performance metrics,\n"
                 "including the following analyses:"
             )
             desc_y = 0.56
@@ -216,16 +231,16 @@ class Reporter:
             fig_cover.add_artist(Rectangle((0.08, 0.08), 0.84, 0.0015, color="#E5E7EB", zorder=1))
             current_year = time.strftime("%Y")
             fig_cover.text(
-                0.08, 0.05, f"{current_year} COCELO Ltd. - Automatically Generated Test Report",
+                0.08, 0.05, f"{current_year} COCELO Ltd. - Automatically Generated",
                 ha="left", va="center", fontsize=9, color="#6B7280"
             )
 
             pdf.savefig(fig_cover)
             plt.close(fig_cover)
 
-            # ===============================
-            # 1. Set Points vs. States
-            # ===============================
+            # -------------------------------
+            # 1) Set Points vs. States
+            # -------------------------------
             if ('set_points' in self.history and 'state' in self.history):
                 set_points = np.array(self.history['set_points'], dtype=float)
                 state = np.array(self.history['state'], dtype=float)
@@ -234,12 +249,11 @@ class Reporter:
                     state = state.reshape(-1, 1)
 
                 n_dims = set_points.shape[1]
-
                 MAX_PLOTS_PER_PAGE_IN_SECTION_1 = 8
                 N_COLS = 2
 
                 START_PAGE_NO = 1
-                PAGE_NUM_IN_SECTION_1 = len(range(0, n_dims, MAX_PLOTS_PER_PAGE_IN_SECTION_1))
+                PAGE_NUM_IN_SECTION_1 = len(list(range(0, n_dims, MAX_PLOTS_PER_PAGE_IN_SECTION_1)))
                 for i, start in enumerate(range(0, n_dims, MAX_PLOTS_PER_PAGE_IN_SECTION_1)):
                     end = min(start + MAX_PLOTS_PER_PAGE_IN_SECTION_1, n_dims)
                     dims_this_page = end - start
@@ -268,19 +282,24 @@ class Reporter:
                     for j in range(dims_this_page, len(axes)):
                         fig.delaxes(axes[j])
 
-                    # leave a touch more room for the header banner
                     fig.tight_layout(rect=[0, 0, 1, 0.92])
                     pdf.savefig(fig)
                     plt.close(fig)
 
-            # ===============================
-            # 2. Command Inputs vs. Measured Outputs
-            # ===============================
-            command_keys = [
-                ("lin_vel_x_command", "lin_vel_x", "Linear Velocity X"),
-                ("lin_vel_y_command", "lin_vel_y", "Linear Velocity Y"),
-                ("ang_vel_z_command", "ang_vel_z", "Angular Velocity Z"),
+            # -------------------------------
+            # 2) Command Inputs vs. Measured Outputs
+            # -------------------------------
+            if "user_command_2" in self.history:
+                command_keys = [
+                ("user_command_0", "lin_vel_x", "Linear Velocity X"),
+                ("user_command_1", "lin_vel_y", "Linear Velocity Y"),
+                ("user_command_2", "ang_vel_yaw", "Angular Velocity Yaw"),
             ]
+            else:
+                command_keys = [
+                    ("user_command_0", "lin_vel_x", "Linear Velocity X"),
+                    ("user_command_1", "ang_vel_yaw", "Angular Velocity Yaw"),
+                ]
 
             plot_keys = [
                 (cmd_key, actual_key, label)
@@ -291,7 +310,7 @@ class Reporter:
             MAX_PLOTS_PER_PAGE_IN_SECTION_2 = 4
 
             START_PAGE_NO = PAGE_NUM_IN_SECTION_1 + 1
-            PAGE_NUM_IN_SECTION_2 = len(range(0, len(plot_keys), MAX_PLOTS_PER_PAGE_IN_SECTION_2)) 
+            PAGE_NUM_IN_SECTION_2 = len(list(range(0, len(plot_keys), MAX_PLOTS_PER_PAGE_IN_SECTION_2)))
             if plot_keys:
                 for i, start in enumerate(range(0, len(plot_keys), MAX_PLOTS_PER_PAGE_IN_SECTION_2)):
                     page_keys = plot_keys[start:start + MAX_PLOTS_PER_PAGE_IN_SECTION_2]
@@ -309,9 +328,9 @@ class Reporter:
                         ax = axes[idx]
 
                         ax.plot(times, cmd_values, linestyle='-', markersize=DEFAULT_MARKER_SIZE,
-                                label=f"{label} Command")
+                                label=f"{cmd_key}")
                         ax.plot(times, actual_values, linestyle='--', markersize=DEFAULT_MARKER_SIZE,
-                                label=f"{label} Measured" if label != 'Position Z' else f"{label} Measured (Absolute)")
+                                label=f"{label}" if label != 'Position Z' else f"{label} (Absolute)")
                         ax.set_xlabel("Time (s)", fontsize=10)
                         ax.set_ylabel(label, fontsize=10)
                         ax.set_title(label, fontsize=12)
@@ -322,11 +341,11 @@ class Reporter:
                     pdf.savefig(fig)
                     plt.close(fig)
 
-            # ===============================
-            # 3. Action Oscillation and Applied Torques
-            # ===============================
+            # -------------------------------
+            # 3) Action Oscillation and Applied Torques
+            # -------------------------------
             START_PAGE_NO = PAGE_NUM_IN_SECTION_1 + PAGE_NUM_IN_SECTION_2 + 1
-            PAGE_NUM_IN_SECTION_3 = 1
+            PAGE_NUM_IN_SECTION_3 = 0
             if ('torque' in self.history and 'action_diff_RMSE' in self.history):
                 diffs = np.array(self.history['action_diff_RMSE'], dtype=float)
                 torque_arr = np.array(self.history['torque'], dtype=float)
@@ -335,8 +354,9 @@ class Reporter:
 
                 fig, axes = plt.subplots(3, 1, figsize=PAGE_SIZE)
                 add_section_header(fig, "Action Oscillation and Applied Torques", page_num=START_PAGE_NO)
+                PAGE_NUM_IN_SECTION_3 = 1
 
-                # (1) Δa (RMS) timeseries
+                # (a) Δa (RMSE) time-series
                 axes[0].plot(times, diffs, linestyle='-', color="#E15759",
                              label="Δa (RMSE)")
                 axes[0].set_xlabel("Time (s)", fontsize=10)
@@ -345,7 +365,7 @@ class Reporter:
                 axes[0].legend(fontsize=8)
                 axes[0].grid(True)
 
-                # (2) Torques per joint timeseries (no markers)
+                # (b) Torques per joint
                 n_torques = torque_arr.shape[1]
                 for i in range(n_torques):
                     axes[1].plot(times, torque_arr[:, i], linestyle='-',
@@ -357,16 +377,14 @@ class Reporter:
                     axes[1].legend(fontsize=8, ncol=2)
                 axes[1].grid(True)
 
-                # (3) Torque distribution
+                # (c) Torque distribution
                 all_torque = torque_arr.ravel()
-                axes[2].hist(all_torque, bins=40, alpha=0.9, edgecolor='black')
-                med = np.median(all_torque)
-                p95 = np.percentile(all_torque, 95)
-                axes[2].axvline(med, linestyle='--', linewidth=1.2, label=f"Median: {med:.3g}")
-                axes[2].axvline(p95, linestyle=':', linewidth=1.2, label=f"95th percentile %: {p95:.3g}")
-                axes[2].set_xlabel("Torque", fontsize=10)
-                axes[2].set_ylabel("Count", fontsize=10)
-                axes[2].set_title("Distribution of Torque (All Joints)", fontsize=12)
+                p5, p95 = np.percentile(all_torque, [5, 95])
+
+                axes[2].hist(all_torque, color='#a6cee3', bins=50, alpha=0.9, edgecolor='black')
+                axes[2].axvline(p5, color='red', linestyle='--', linewidth=1.2, label=f"5th: {p5:.3g}")
+                axes[2].axvline(p95, color='red', linestyle=':', linewidth=1.2, label=f"95th: {p95:.3g}")
+                axes[2].axvline(np.mean(all_torque), color='green', linestyle='-.', linewidth=1.2, label=f"Average: {np.mean(all_torque):.3g}")
                 axes[2].legend(fontsize=8)
                 axes[2].grid(True)
 
@@ -374,14 +392,14 @@ class Reporter:
                 pdf.savefig(fig)
                 plt.close(fig)
 
-            # ===============================
-            # Final Section: Configuration Table
-            # ===============================
+            # -------------------------------
+            # Final) Configuration Table
+            # -------------------------------
             filtered_config = {k: v for k, v in self.config.items() if k in ["env", "policy", "observation", "random", "hardware"]}
             table_data = self._build_config_rows(filtered_config)
             MAX_ROWS_PER_PAGE = 50
             total_rows = len(table_data)
-            n_pages = math.ceil(total_rows / MAX_ROWS_PER_PAGE)
+            n_pages = math.ceil(total_rows / MAX_ROWS_PER_PAGE) if total_rows > 0 else 1
 
             START_PAGE_NO = PAGE_NUM_IN_SECTION_1 + PAGE_NUM_IN_SECTION_2 + PAGE_NUM_IN_SECTION_3 + 1
             for i, page in enumerate(range(n_pages)):
@@ -395,30 +413,102 @@ class Reporter:
                 ax.axis('off')
                 add_section_header(fig_config, "Configuration", page_num=START_PAGE_NO + i)
 
-                table = ax.table(cellText=page_data,
-                                 colLabels=["Parameter", "Value"],
-                                 loc="upper center",
-                                 cellLoc='left')
+                table = ax.table(
+                    cellText=page_data,
+                    colLabels=["Parameter", "Value"],
+                    loc="upper center",
+                    cellLoc='left',
+                )
                 table.auto_set_font_size(False)
                 table.set_fontsize(10)
-                table.scale(1, 1.2)
+                table.scale(1, 1.2)  # Keep original scale; DO NOT change column widths
 
+                # Header/body base styling; detect a base row height
+                base_h = None
                 for (row, col), cell in table.get_celld().items():
                     if row == 0:
                         cell.set_text_props(fontweight='bold', color='white')
                         cell.set_facecolor("#40466e")
                     else:
+                        if base_h is None:
+                            base_h = cell.get_height()
                         cell.set_facecolor("#f1f1f2")
                         if col == 0:
-                            text_str = cell.get_text().get_text().strip()
-                            if text_str in ["env", "policy", "observation", "random", "hardware"]:
+                            left_text = cell.get_text().get_text().strip()
+                            if left_text in ["env", "policy", "observation", "random", "hardware"]:
                                 cell.set_text_props(fontweight='bold')
-                        elif col == 1:
-                            param_name = table_data[start_idx + row - 1][0].strip()
-                            if any(kw in param_name for kw in ["stacked_obs_order", "non_stacked_obs_order"]):
-                                cell.set_fontsize(7)
 
-                # leave headroom for the new header banner
+                if base_h is None:
+                    base_h = 0.05  # Fallback if table implementation changes
+
+                # Make left-column padding and alignment UNIFORM for all body rows
+                for (row, col), cell in table.get_celld().items():
+                    if row > 0 and col == 0:
+                        # Set consistent left padding and alignment so all labels start at same x
+                        try:
+                            cell.PAD = 0.02
+                        except Exception:
+                            pass
+                        cell.get_text().set_ha("left")
+                        cell.get_text().set_va("center")
+
+                # (1) Force the "observation" section header's Value cell to be empty
+                obs_header_row = None
+                for (row, col), cell in table.get_celld().items():
+                    if row == 0:
+                        continue
+                    if col == 0:
+                        left_key = cell.get_text().get_text().strip()
+                        if left_key == "observation":
+                            obs_header_row = row
+                            if (row, 1) in table.get_celld():
+                                vcell = table.get_celld()[(row, 1)]
+                                vcell.get_text().set_text("")  # Keep blank (never show text)
+
+                # (2) Wrap ONLY the two target keys; center-align; adjust row height; keep others untouched
+                target_keys = {"stacked_obs_order", "non_stacked_obs_order"}
+                for (row, col), cell in list(table.get_celld().items()):
+                    # Only body rows, Value column
+                    if row == 0 or col != 1:
+                        continue
+                    # Never touch the observation header's Value cell
+                    if obs_header_row is not None and row == obs_header_row:
+                        continue
+
+                    # Read the left key for this row (strip indentation)
+                    if row - 1 < len(page_data):
+                        left_key = page_data[row - 1][0].lstrip()
+                    else:
+                        left_key = ""
+
+                    if left_key not in target_keys:
+                        continue
+
+                    value_text = cell.get_text().get_text()
+                    if not value_text:
+                        continue
+
+                    # Wrap text and set it back
+                    wrapped, n_lines = self._wrap_long_text(value_text, width=50, max_lines=8)
+                    vtxt = cell.get_text()
+                    vtxt.set_text(wrapped)
+                    vtxt.set_ha("left")
+                    vtxt.set_va("center")  # vertical center for consistent look
+
+                    # Row height with generous growth and safety for multi-line
+                    growth = 0.70                                # per extra line multiplier
+                    safety = 0.012 if n_lines > 1 else 0.0       # absolute safety margin
+                    new_h = base_h * (1.0 + growth * (n_lines - 1)) + safety
+
+                    # Apply same height to Parameter cell and keep its text vertically centered
+                    if (row, 0) in table.get_celld():
+                        lcell = table.get_celld()[(row, 0)]
+                        lcell.set_height(new_h)
+                        lcell.get_text().set_va("center")
+                        lcell.get_text().set_ha("left")  # ensure left-aligned label
+
+                    cell.set_height(new_h)
+
                 fig_config.tight_layout(rect=[0, 0, 1, 0.92])
                 pdf.savefig(fig_config)
                 plt.close(fig_config)

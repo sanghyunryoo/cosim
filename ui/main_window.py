@@ -3,9 +3,9 @@ import yaml
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QPushButton, QLabel, QMessageBox, QMainWindow,
-    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication, QCheckBox, QDialog, QDialogButtonBox
+    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QCheckBox, QDialog, QDialogButtonBox, QSizePolicy, QApplication, QStyle
 )
-from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt, QEvent, QUrl
+from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt, QEvent, QUrl, QTimer
 from PyQt5.QtGui import QDesktopServices, QIcon, QDoubleValidator, QIntValidator
 from core.tester import Tester
 
@@ -14,7 +14,7 @@ from core.tester import Tester
 # ---------------------------
 
 class NoWheelComboBox(QComboBox):
-    # Ignore mouse wheel to prevent accidental selection changes
+    # Ignore mouse wheel to prevent accidental selection changes (event ignored -> bubble up to parent, enabling scroll area to catch it)
     def wheelEvent(self, event):
         event.ignore()
 
@@ -103,7 +103,7 @@ class HardwareSettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)   # Close dialog with "Rejected" state
         main_layout.addWidget(buttons)
 
-        # Set maximum height to 500px; scrolling will be enabled if exceeded
+        # Set maximum height to 600px; scrolling will be enabled if exceeded
         self.setMaximumHeight(600)
 
     def get_settings(self):
@@ -111,17 +111,18 @@ class HardwareSettingsDialog(QDialog):
         return {key: le.text() for key, le in self.fields.items()}
 
 # ---------------------------
-# Observation Settings Dialog
+# Observation Settings Dialog (SCROLLABLE)
 # ---------------------------
 
 class ObservationSettingsDialog(QDialog):
     def __init__(self, settings, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Observation Settings")
-        self.obs_types = ["dof_pos", "dof_vel", "lin_vel", "ang_vel", "projected_gravity", "height_map", "last_action"]
+        self.obs_types = ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "height_map", "last_action"]
         self.settings = settings if isinstance(settings, dict) else {}
         self.parent_widget = parent
 
+        # Row stores for stacked / non-stacked entries
         self.stacked_rows = []   # dicts: {"layout": QHBoxLayout, "combo": QComboBox, "freq": QComboBox, "scale": QComboBox}
         self.non_rows = []
 
@@ -132,13 +133,38 @@ class ObservationSettingsDialog(QDialog):
         self._setup_ui()
 
     def _scale_options(self):
-        return ["0.01", "0.025", "0.05", "0.1", "0.15", "0.25", "0.5", "0.75", "1.0", "2.0", "2.5", "5"]
+        # Predefined numeric options for scale combo boxes
+        return ["0", "0.01", "0.05", "0.1", "0.15", "0.25", "0.5", "0.75", "1.0", "2.0", "2.5", "5"]
 
     def _setup_ui(self):
-        main_layout = QVBoxLayout(self)
-        areas_layout = QHBoxLayout()
+        # ====== Outer layout for the dialog ======
+        self._outer_layout = QVBoxLayout(self)
 
-        # ---- Load env config & current settings ----
+        # ====== Scroll area wrapping the inner content ======
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)  # Make the scroll area adapt to dialog resizing
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Avoid horizontal scrolling
+        self._outer_layout.addWidget(self._scroll)
+
+        # ====== Inner widget & its main layout (everything scrolls inside here) ======
+        self._inner_widget = QWidget()
+        self._inner_layout = QVBoxLayout(self._inner_widget)
+
+        # ---- obs label ----
+        obs_label = QLabel("Left → [Stacked]   |   [Non-Stacked]   |   [Command] ← Right")
+        obs_label.setAlignment(Qt.AlignCenter)
+        obs_label.setStyleSheet("""
+            QLabel {
+                font-weight: bold;
+                font-size: 7pt;
+                color: #222222;
+            }
+        """)
+        obs_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+
+        self._inner_layout.addWidget(obs_label)
+
+        # ---- Load env config & current settings (used throughout UI building) ----
         env_id = self.parent_widget.env_id_cb.currentText()
         env_cfg = self.parent_widget.env_config.get(env_id, {}) or {}
         cmd_cfg_raw = env_cfg.get("command", {}) if isinstance(env_cfg.get("command", {}), dict) else {}
@@ -167,7 +193,6 @@ class ObservationSettingsDialog(QDialog):
         add_btn.clicked.connect(lambda: self.add_stacked())
         stacked_v.addWidget(add_btn)
         stacked_group.setLayout(stacked_v)
-        areas_layout.addWidget(stacked_group)
 
         # ---------------- Non-Stacked Observation ----------------
         non_group = QGroupBox("Non-Stacked Observation")
@@ -178,9 +203,12 @@ class ObservationSettingsDialog(QDialog):
         add_non.clicked.connect(lambda: self.add_non())
         non_v.addWidget(add_non)
         non_group.setLayout(non_v)
-        areas_layout.addWidget(non_group)
 
-        main_layout.addLayout(areas_layout)
+        # Two groups side-by-side
+        areas_layout = QHBoxLayout()
+        areas_layout.addWidget(stacked_group)
+        areas_layout.addWidget(non_group)
+        self._inner_layout.addLayout(areas_layout)
 
         # ---------------- Height Map (size/res fields) ----------------
         height_group = QGroupBox("Height Map")
@@ -224,7 +252,7 @@ class ObservationSettingsDialog(QDialog):
         size_res_layout.addWidget(self.height_res_y_le)
         height_layout.addRow("Size (m):", size_res_layout)
         height_group.setLayout(height_layout)
-        main_layout.addWidget(height_group)
+        self._inner_layout.addWidget(height_group)
 
         # ---------------- Command ----------------
         command_group = QGroupBox("Command")
@@ -237,25 +265,30 @@ class ObservationSettingsDialog(QDialog):
         command_layout.addRow("Command Dim:", self.command_dim_cb)
 
         # Per-index scales grid
-        self.command_scales_group = QGroupBox("Command Scales (per index)")
+        self.command_scales_group = QGroupBox("Command Scales")
         self.command_scales_grid = QGridLayout(self.command_scales_group)
         self.command_scales_grid.setColumnStretch(1, 1)
         self._rebuild_command_scales(command_scales_from_cfg, int(self.command_dim_cb.currentText()))
         self.command_dim_cb.currentTextChanged.connect(
-            lambda _: self._rebuild_command_scales(command_scales_from_cfg, int(self.command_dim_cb.currentText()))
+            lambda _:
+                (self._rebuild_command_scales(command_scales_from_cfg, int(self.command_dim_cb.currentText())),
+                 QTimer.singleShot(0, self._recalculate_height))
         )
 
         command_layout.addRow(self.command_scales_group)
         command_group.setLayout(command_layout)
-        main_layout.addWidget(command_group)
+        self._inner_layout.addWidget(command_group)
 
-        # ---------------- Buttons ----------------
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        main_layout.addWidget(buttons)
+        # Put the fully built inner widget into the scroll area
+        self._scroll.setWidget(self._inner_widget)
 
-        # ---------------- Populate rows ----------------
+        # ---------------- Dialog buttons (fixed at the bottom outside the scroll) ----------------
+        self._buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self._buttons.accepted.connect(self.accept)
+        self._buttons.rejected.connect(self.reject)
+        self._outer_layout.addWidget(self._buttons)
+
+        # ---------------- Populate rows after widgets are ready ----------------
         # Priority: follow current settings' order + each obs's freq/scale
         stacked_list_set = self.settings.get("stacked_obs_order", []) or []
         non_stacked_list_set = self.settings.get("non_stacked_obs_order", []) or []
@@ -267,10 +300,18 @@ class ObservationSettingsDialog(QDialog):
             # Restore based on current settings
             for obs in stacked_list_set:
                 prev = self.settings.get(obs) or {}
-                self.add_stacked(obs, to_int(prev.get("freq", 50), 50), to_float(prev.get("scale", scale_for_default(obs))))
+                self.add_stacked(
+                    obs,
+                    to_int(prev.get("freq", 50), 50),
+                    to_float(prev.get("scale", scale_for_default(obs)))
+                )
             for obs in non_stacked_list_set:
                 prev = self.settings.get(obs) or {}
-                self.add_non(obs, to_int(prev.get("freq", 50), 50), to_float(prev.get("scale", scale_for_default(obs))))
+                self.add_non(
+                    obs,
+                    to_int(prev.get("freq", 50), 50),
+                    to_float(prev.get("scale", scale_for_default(obs)))
+                )
         else:
             # YAML defaults
             yaml_stacked = env_cfg.get("stacked_obs_order", []) or {}
@@ -279,6 +320,57 @@ class ObservationSettingsDialog(QDialog):
                 self.add_stacked(obs, 50, scale_for_default(obs))
             for obs in yaml_non:
                 self.add_non(obs, 50, scale_for_default(obs))
+
+        # Initial sizing after building widgets (final pass will run in showEvent)
+        self._recalculate_height()
+
+    def showEvent(self, event):
+        # Ensure final sizing after the dialog becomes visible
+        super().showEvent(event)
+        QTimer.singleShot(0, self._recalculate_height)
+
+    def _recalculate_height(self):
+        """Recalculate and apply dialog height to include content + buttons + margins + frame."""
+        try:
+            # Activate layouts so that size hints are accurate
+            if self._outer_layout:
+                self._outer_layout.activate()
+            if self._inner_layout:
+                self._inner_layout.activate()
+            if self.layout():
+                self.layout().activate()
+
+            # Measure inner content
+            self._inner_widget.adjustSize()
+            content_h = self._inner_widget.sizeHint().height()
+
+            # Buttons/margins/chrome
+            btn_h = self._buttons.sizeHint().height() if self._buttons else 0
+            margins = self._outer_layout.contentsMargins() if self._outer_layout else self.contentsMargins()
+            chrome_h = (margins.top() + margins.bottom() + btn_h +
+                        (self._outer_layout.spacing() if self._outer_layout else 0))
+
+            # Titlebar/frame height
+            try:
+                frame_h = self.style().pixelMetric(QStyle.PM_TitleBarHeight) \
+                          + 2 * self.style().pixelMetric(QStyle.PM_DefaultFrameWidth)
+            except Exception:
+                frame_h = 40
+
+            total_h = int(content_h + chrome_h + frame_h)
+
+            # Clamp to 90% of available screen height
+            scr = (self.screen() if hasattr(self, "screen") else None) or QApplication.primaryScreen()
+            avail_h = scr.availableGeometry().height() if scr else 900
+            max_h = int(avail_h * 0.90)
+
+            target_h = max(400, min(max_h, total_h))
+            self.resize(900, target_h)
+        except Exception:
+            # Fallback to a safe default if measurement fails
+            scr = (self.screen() if hasattr(self, "screen") else None) or QApplication.primaryScreen()
+            avail_h = scr.availableGeometry().height() if scr else 900
+            self.resize(900, int(avail_h * 0.90))
 
     # ------- Command scale helpers -------
     def _rebuild_command_scales(self, command_scales_from_cfg: dict, cmd_dim: int):
@@ -346,6 +438,9 @@ class ObservationSettingsDialog(QDialog):
         self.stacked_container.addLayout(h)
         self.stacked_rows.append({"layout": h, "combo": combo, "freq": freq_cb, "scale": scale_cb})
 
+        # Recalculate height after dynamic content change
+        QTimer.singleShot(0, self._recalculate_height)
+
     def add_non(self, selected="", freq=50, scale=1.0):
         # Add one non-stacked-observation row with type/freq/scale and a delete button
         h = QHBoxLayout()
@@ -379,6 +474,9 @@ class ObservationSettingsDialog(QDialog):
         self.non_container.addLayout(h)
         self.non_rows.append({"layout": h, "combo": combo, "freq": freq_cb, "scale": scale_cb})
 
+        # Recalculate height after dynamic content change
+        QTimer.singleShot(0, self._recalculate_height)
+
     def get_default_scale(self, obs_type):
         # Read default scale from the current environment's obs_scales
         env_id = self.parent_widget.env_id_cb.currentText()
@@ -398,6 +496,9 @@ class ObservationSettingsDialog(QDialog):
             if row["layout"] is layout:
                 row_store.pop(i)
                 break
+
+        # Recalculate height after dynamic content change
+        QTimer.singleShot(0, self._recalculate_height)
 
     def _extract_height_map_freq_scale_from_rows(self):
         """From the rows, find the first 'height_map' selection and return its (freq, scale)."""
@@ -499,7 +600,7 @@ class MainWindow(QMainWindow):
         with open(config_path) as f:
             self.env_config = yaml.full_load(f)
 
-        self.obs_types = ["dof_pos", "dof_vel", "lin_vel", "ang_vel", "projected_gravity", "height_map", "last_action"]
+        self.obs_types = ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "height_map", "last_action"]
 
         # Per-environment observation settings cache
         self.obs_settings_by_env = {}
@@ -546,8 +647,12 @@ class MainWindow(QMainWindow):
             "height_map": {"size_x": 1.0, "size_y": 0.6, "res_x": 15, "res_y": 9, "freq": 50, "scale": 1.0},
             "dof_pos": None,
             "dof_vel": None,
-            "lin_vel": None,
-            "ang_vel": None,
+            "lin_vel_x": None,
+            "lin_vel_y": None,
+            "lin_vel_z": None,
+            "ang_vel_roll": None,
+            "ang_vel_pitch": None,
+            "ang_vel_yaw": None,
             "projected_gravity": None,
             "last_action": None,
         }
@@ -628,13 +733,12 @@ class MainWindow(QMainWindow):
         # Sync current observation_settings with latest cache
         self.observation_settings = (self.obs_settings_by_env[env_id]).copy()
 
-
     # ---------------- per-env hardware helpers (like observation) ----------------
     def _make_hardware_defaults(self, env_id: str):
         """Build default hardware settings for the env from YAML (shallow copy)."""
         env_cfg = self.env_config.get(env_id, {}) or {}
         hw = env_cfg.get("hardware", {}) or {}
-        # 문자열 유지 (대화상자에서 편집), 숫자 변환은 _gather_config에서 수행
+        # Keep string values (editable in dialog). Numeric conversion is done in _gather_config.
         return hw.copy()
 
     def _ensure_hardware_defaults(self):
@@ -643,7 +747,6 @@ class MainWindow(QMainWindow):
         if env_id not in self.hardware_settings_by_env:
             self.hardware_settings_by_env[env_id] = self._make_hardware_defaults(env_id)
         self.hardware_settings = (self.hardware_settings_by_env[env_id]).copy()
-        
 
     def update_defaults(self, new_env_id):
         settings = self.env_config.get(new_env_id, {}) or {}
@@ -667,7 +770,7 @@ class MainWindow(QMainWindow):
             c3 = cmd_cfg.get("command_3_initial", 0.0)
             self.command_initial_value_le_list[3].setText(str(to_float(c3, 0.0)))
 
-        # On environment change: load from cache if exists; otherwise build defaults and cache them
+        # On environment change: observation settings via cache or defaults
         if new_env_id in self.obs_settings_by_env:
             self.observation_settings = (self.obs_settings_by_env[new_env_id]).copy()
         else:
@@ -1121,7 +1224,7 @@ class MainWindow(QMainWindow):
         dialog = HardwareSettingsDialog((self.hardware_settings).copy(), self)
         if dialog.exec_() == QDialog.Accepted:
             self.hardware_settings = dialog.get_settings()
-            # NEW: save back to per-env cache so it persists after env switches
+            # Save back to per-env cache so it persists after env switches
             self.hardware_settings_by_env[env_id] = (self.hardware_settings).copy()
 
     def open_observation_settings(self):

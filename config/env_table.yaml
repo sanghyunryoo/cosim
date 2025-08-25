@@ -1,14 +1,18 @@
-# obs fields: ["dof_pos", "dof_vel", "lin_vel", "ang_vel", "projected_gravity", "height_map", "last_action"]
+# obs fields: ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "height_map", "last_action"]
 
 "flamingo_light_p_v0":
-  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "last_action"]
   "stack_size": 3
   "non_stacked_obs_order": []
   "obs_scales":
-    "lin_vel": 1.0
-    "ang_vel": 1.0
     "dof_pos": 1.0
     "dof_vel": 1.0
+    "lin_vel_x": 1.0
+    "lin_vel_y": 1.0
+    "lin_vel_z": 1.0
+    "ang_vel_roll": 1.0
+    "ang_vel_pitch": 1.0
+    "ang_vel_yaw": 1.0
   "command":
     "command_dim": 3
     "command_3_initial": 0.261
@@ -28,14 +32,18 @@
     
 
 "flamingo_p_v0":
-  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "last_action"]
   "stack_size": 3
   "non_stacked_obs_order": []
   "obs_scales":
-    "lin_vel": 2.0
-    "ang_vel": 0.25
     "dof_pos": 1.0
     "dof_vel": 0.15
+    "lin_vel_x": 2.0
+    "lin_vel_y": 2.0
+    "lin_vel_z": 2.0
+    "ang_vel_roll": 0.25
+    "ang_vel_pitch": 0.25
+    "ang_vel_yaw": 0.25
   "command":
     "command_dim": 4
     "command_3_initial": 0.363
@@ -64,14 +72,18 @@
 
 
 "humanoid_p_v0":
-  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "last_action", "lin_vel_x", "lin_vel_y", "lin_vel_z"]
   "stack_size": 3
-  "non_stacked_obs_order": ["lin_vel"]
+  "non_stacked_obs_order": []
   "obs_scales":
-    "lin_vel": 2.0
-    "ang_vel": 0.25
     "dof_pos": 1.0
     "dof_vel": 0.15
+    "lin_vel_x": 2.0
+    "lin_vel_y": 2.0
+    "lin_vel_z": 2.0
+    "ang_vel_roll": 0.25
+    "ang_vel_pitch": 0.25
+    "ang_vel_yaw": 0.25
   "command":
     "command_dim": 4
     "command_3_initial": 1.105
