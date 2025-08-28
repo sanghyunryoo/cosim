@@ -219,7 +219,7 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
     def reset_model(self):
         self.local_step = 0
         self.action = np.zeros(self.action_dim)
-        self.previous_action = np.zeros(self.action_dim)
+        self.prev_action = np.zeros(self.action_dim)
         self.control_manager.reset()
         self.applied_torques = np.zeros(self.action_dim)
 
@@ -234,7 +234,7 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)
-        qpos[2] = 0.4535
+        qpos[2] = 0.455
         qpos[3:7] = np.array([1, 0, 0, 0])
         qpos[7:15] = np.zeros(8)
         qpos[7:15] = uniform_noisy_data(qpos[7:15], lower=-self.init_noise, upper=self.init_noise)

@@ -211,7 +211,7 @@ class FlamingoLightPV0(MujocoEnv, utils.EzPickle):
     def reset_model(self):
         self.local_step = 0
         self.action = np.zeros(self.action_dim)
-        self.previous_action = np.zeros(self.action_dim)
+        self.prev_action = np.zeros(self.action_dim)
         self.control_manager.reset()
         self.applied_torques = np.zeros(self.action_dim)
 
