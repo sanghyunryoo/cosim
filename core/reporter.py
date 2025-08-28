@@ -10,6 +10,17 @@ import time
 from cycler import cycler
 import textwrap  # For wrapping long strings in table cells
 
+palette = [
+    "#E74C3C",  # Red
+    "#3F51B5",  # Indigo
+    "#E67E22",  # Orange
+    "#F1C40F",  # Yellow
+    "#2ECC71",  # Green
+    "#3498DB",  # Blue
+    "#9B59B6",  # Violet
+    "#222222",  # Black
+]
+
 # Global Matplotlib style (clean, readable for PDF)
 plt.style.use('seaborn-v0_8-whitegrid')
 plt.rcParams.update({
@@ -34,13 +45,7 @@ plt.rcParams.update({
     'pdf.fonttype': 42,
     'ps.fonttype': 42,
     # Color palette (avoid yellow)
-    'axes.prop_cycle': cycler('color', [
-        '#E15759',  # red
-        '#4E79A7',  # blue
-        '#B07AA1',  # purple
-        '#59A14F',  # green
-        '#9C755F'   # brown
-    ])
+    'axes.prop_cycle': cycler('color', palette)
 })
 
 # Default marker size for time-series plots
@@ -274,7 +279,7 @@ class Reporter:
                         ax.plot(times, state[:, dim_idx], linestyle='-.',
                                 markersize=DEFAULT_MARKER_SIZE, label="State")
                         ax.set_xlabel("Time (s)", fontsize=10)
-                        ax.set_ylabel(f"Dimension {dim_idx}", fontsize=10)
+                        ax.set_ylabel(f"Set Point", fontsize=10)
                         ax.set_title(f"Dimension {dim_idx}", fontsize=12)
                         ax.legend(fontsize=8)
                         ax.grid(True)
@@ -357,8 +362,22 @@ class Reporter:
                 PAGE_NUM_IN_SECTION_3 = 1
 
                 # (a) Δa (RMSE) time-series
-                axes[0].plot(times, diffs, linestyle='-', color="#E15759",
-                             label="Δa (RMSE)")
+                axes[0].plot(times, diffs, linestyle='-', label="Δa (RMSE)")
+
+                # --- Moving Average (same graph) ---
+                # window from config if provided; default = 20
+                ma_win = int((self.config.get('report', {}) or {}).get('action_diff_ma_window', 20))
+                ma_win = max(1, ma_win)
+
+                # compute simple moving average and align to times
+                kernel = np.ones(ma_win, dtype=float) / float(ma_win)
+                ma_vals = np.convolve(diffs, kernel, mode='valid')
+                # pad the front with NaNs so length matches times
+                ma_aligned = np.concatenate([np.full(ma_win - 1, np.nan), ma_vals])
+
+                axes[0].plot(times, ma_aligned, linestyle='--', label=f"Δa (RMSE) Moving Average (window={ma_win})")
+                # -----------------------------------
+
                 axes[0].set_xlabel("Time (s)", fontsize=10)
                 axes[0].set_ylabel("Δa (RMSE)", fontsize=10)
                 axes[0].set_title("Action Oscillation", fontsize=12)
@@ -367,26 +386,45 @@ class Reporter:
 
                 # (b) Torques per joint
                 n_torques = torque_arr.shape[1]
+                LINESTYLES = ["-", "--", ":", "-."]
+
                 for i in range(n_torques):
-                    axes[1].plot(times, torque_arr[:, i], linestyle='-',
-                                 label=f"Torque {i}")
+                    color = palette[i % 8]
+                    ls = LINESTYLES[(i // 8) % len(LINESTYLES)]
+                    axes[1].plot(times, torque_arr[:, i],linestyle=ls, color=color, label=f"Torque {i}")
+
                 axes[1].set_xlabel("Time (s)", fontsize=10)
                 axes[1].set_ylabel("Torque", fontsize=10)
                 axes[1].set_title("Applied Torque of Each Joint", fontsize=12)
-                if n_torques <= 10:
-                    axes[1].legend(fontsize=8, ncol=2)
+                
+                if n_torques <= 8:
+                    axes[1].legend(fontsize=7, ncol=2)
+                elif n_torques <= 16:
+                    axes[1].legend(fontsize=6, ncol=4)
+                else:
+                    axes[1].legend(fontsize=6, ncol=6)
+
                 axes[1].grid(True)
 
                 # (c) Torque distribution
                 all_torque = torque_arr.ravel()
                 p5, p95 = np.percentile(all_torque, [5, 95])
+                axes[2].set_xlabel("Torque (N·m)", fontsize=10)
+                axes[2].set_ylabel("Count", fontsize=10)
+                axes[2].set_title("Torque Distribution of All Joints", fontsize=12)
+                axes[2].hist(all_torque, color="#B1DBF7", bins=60, alpha=0.9, edgecolor='black')
+                axes[2].axvline(p5, color="#E74C3C", linestyle='--', linewidth=1.2, label=f"5th: {p5:.3g}")
+                axes[2].axvline(p95, color="#E74C3C", linestyle=':', linewidth=1.2, label=f"95th: {p95:.3g}")
 
-                axes[2].hist(all_torque, color='#a6cee3', bins=50, alpha=0.9, edgecolor='black')
-                axes[2].axvline(p5, color='red', linestyle='--', linewidth=1.2, label=f"5th: {p5:.3g}")
-                axes[2].axvline(p95, color='red', linestyle=':', linewidth=1.2, label=f"95th: {p95:.3g}")
-                axes[2].axvline(np.mean(all_torque), color='green', linestyle='-.', linewidth=1.2, label=f"Average: {np.mean(all_torque):.3g}")
+                mean_val = np.mean(all_torque)
+                mean_abs_val = np.mean(np.abs(all_torque))
+
+                axes[2].axvline(mean_val, color="#00FF6A", linestyle='-.', linewidth=1.2, label=f"Average: {mean_val:.3g}")
+                axes[2].axvline(mean_abs_val, color="#222222", linestyle='-.', linewidth=1.2, label=f"|Average|: {mean_abs_val:.3g}")
+
                 axes[2].legend(fontsize=8)
                 axes[2].grid(True)
+
 
                 fig.tight_layout(rect=[0, 0, 1, 0.92])
                 pdf.savefig(fig)

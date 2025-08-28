@@ -118,7 +118,7 @@ class ObservationSettingsDialog(QDialog):
     def __init__(self, settings, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Observation Settings")
-        self.obs_types = ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "height_map", "last_action"]
+        self.obs_types = ["dof_pos", "dof_vel", "ang_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "projected_gravity", "height_map", "last_action"]
         self.settings = settings if isinstance(settings, dict) else {}
         self.parent_widget = parent
 
@@ -151,13 +151,13 @@ class ObservationSettingsDialog(QDialog):
         self._inner_layout = QVBoxLayout(self._inner_widget)
 
         # ---- obs label ----
-        obs_label = QLabel("Left → [Stacked]   |   [Non-Stacked]   |   [Command] ← Right")
+        obs_label = QLabel("State Order: [Stacked]  →  [Non-Stacked]  →  [Command]")
         obs_label.setAlignment(Qt.AlignCenter)
         obs_label.setStyleSheet("""
             QLabel {
-                font-weight: bold;
                 font-size: 7pt;
                 color: #222222;
+                letter-spacing: 1px;
             }
         """)
         obs_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
@@ -600,7 +600,7 @@ class MainWindow(QMainWindow):
         with open(config_path) as f:
             self.env_config = yaml.full_load(f)
 
-        self.obs_types = ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel_roll", "ang_vel_pitch", "ang_vel_yaw", "projected_gravity", "height_map", "last_action"]
+        self.obs_types = ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel", "projected_gravity", "height_map", "last_action"]
 
         # Per-environment observation settings cache
         self.obs_settings_by_env = {}
@@ -612,6 +612,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Waiting ...")
         self.env_id_cb.currentTextChanged.connect(self.update_defaults)
         self.update_defaults(self.env_id_cb.currentText())
+        self._last_run_had_error = False
 
     def _init_window(self):
         app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
@@ -650,9 +651,7 @@ class MainWindow(QMainWindow):
             "lin_vel_x": None,
             "lin_vel_y": None,
             "lin_vel_z": None,
-            "ang_vel_roll": None,
-            "ang_vel_pitch": None,
-            "ang_vel_yaw": None,
+            "ang_vel": None,
             "projected_gravity": None,
             "last_action": None,
         }
@@ -1243,6 +1242,7 @@ class MainWindow(QMainWindow):
 
     def start_test(self):
         # Ensure latest settings for the current env
+        self._last_run_had_error = False
         self._ensure_observation_defaults()
         self._ensure_hardware_defaults()
 
@@ -1376,21 +1376,24 @@ class MainWindow(QMainWindow):
         self.status_label.setText(the_text)
         self._reset_ui_after_test()
         self.position_command_cb.setEnabled(True)
-        reply = QMessageBox.question(
-            self,
-            "Check Report",
-            "Test has finished. Would you like to view the report?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            policy_file_path = self.policy_file_le.text().strip()
-            report_path = os.path.join(os.path.dirname(policy_file_path), "report.pdf")
-            if os.path.isfile(report_path):
-                QDesktopServices.openUrl(QUrl.fromLocalFile(report_path))
-            else:
-                QMessageBox.warning(self, "Warning", "Report file (report.pdf) does not exist.")
 
+        if not self._last_run_had_error:
+            reply = QMessageBox.question(
+                self,
+                "Check Report",
+                "Test has finished. Would you like to view the report?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                policy_file_path = self.policy_file_le.text().strip()
+                report_path = os.path.join(os.path.dirname(policy_file_path), "report.pdf")
+                if os.path.isfile(report_path):
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(report_path))
+                else:
+                    QMessageBox.warning(self, "Warning", "Report file (report.pdf) does not exist.")
+        
     def on_test_error(self, error_msg):
+        self._last_run_had_error = True
         QMessageBox.critical(self, "Test Error", error_msg)
         self.status_label.setText("Error occurred")
         self._reset_ui_after_test()

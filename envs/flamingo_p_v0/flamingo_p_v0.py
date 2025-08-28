@@ -69,9 +69,7 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
         self.obs_to_dim = {
             "dof_pos": 6,
             "dof_vel": 8,
-            "ang_vel_roll": 1,
-            "ang_vel_pitch": 1,
-            "ang_vel_yaw": 1,
+            "ang_vel": 3,
             "lin_vel_x": 1,
             "lin_vel_y": 1,
             "lin_vel_z": 1,
@@ -104,12 +102,14 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
     def _get_obs(self):
         dof_pos = self.data.qpos[self.q_indices]
         dof_vel = self.data.qvel[self.qd_indices]
+
         ang_vel = self.data.sensor('angular-velocity').data.astype(np.double)
         lin_vel = self.data.sensor("linear-velocity").data.astype(np.float32)
         quat = self.data.sensor('orientation').data[[1, 2, 3, 0]].astype(np.double)
         if np.all(quat == 0):
             quat = np.array([0, 0, 0, 1])
         projected_gravity = MathUtils.quat_to_base_vel(quat, np.array([0, 0, -1], dtype=np.double))
+
         if self.config["observation"]["height_map"] is not None:
             height_map = self.mujoco_utils.get_height_map(self.data, self.size_x, self.size_y, self.res_x, self.res_y) 
         else:
@@ -125,9 +125,7 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
         return {
             "dof_pos": dof_pos_noisy,
             "dof_vel": dof_vel_noisy,
-            "ang_vel_roll": ang_vel_noisy[0],
-            "ang_vel_pitch": ang_vel_noisy[1],
-            "ang_vel_yaw": ang_vel_noisy[2],
+            "ang_vel": ang_vel_noisy,
             "lin_vel_x": lin_vel_noisy[0],
             "lin_vel_y": lin_vel_noisy[1],
             "lin_vel_z": lin_vel_noisy[2],
@@ -236,9 +234,9 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
 
     def initial_qpos(self):
         qpos = np.zeros(self.model.nq)
-        qpos[2] = 0.36288
+        qpos[2] = 0.4535
         qpos[3:7] = np.array([1, 0, 0, 0])
-        qpos[7:15] = np.array([0, 0.0, -0.0, 0, 0, 0.0, -0.0, 0])
+        qpos[7:15] = np.zeros(8)
         qpos[7:15] = uniform_noisy_data(qpos[7:15], lower=-self.init_noise, upper=self.init_noise)
         return qpos
     

@@ -65,9 +65,7 @@ class FlamingoLightPV0(MujocoEnv, utils.EzPickle):
         self.obs_to_dim = {
             "dof_pos": 2,
             "dof_vel": 4,
-            "ang_vel_roll": 1,
-            "ang_vel_pitch": 1,
-            "ang_vel_yaw": 1,
+            "ang_vel": 3,
             "lin_vel_x": 1,
             "lin_vel_y": 1,
             "lin_vel_z": 1,
@@ -121,9 +119,7 @@ class FlamingoLightPV0(MujocoEnv, utils.EzPickle):
         return {
             "dof_pos": dof_pos_noisy,
             "dof_vel": dof_vel_noisy,
-            "ang_vel_roll": ang_vel_noisy[0],
-            "ang_vel_pitch": ang_vel_noisy[1],
-            "ang_vel_yaw": ang_vel_noisy[2],
+            "ang_vel": ang_vel_noisy,
             "lin_vel_x": lin_vel_noisy[0],
             "lin_vel_y": lin_vel_noisy[1],
             "lin_vel_Z": lin_vel_noisy[2],
