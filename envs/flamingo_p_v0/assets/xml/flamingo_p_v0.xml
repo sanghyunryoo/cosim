@@ -1,4 +1,4 @@
-<mujoco model="flamingo_rev_01_5_2">
+<mujoco model="flamingo_p_v0">
     <compiler angle="radian" />
     <option timestep="0.005" gravity="0 0 -9.807" iterations="50" solver="Newton" jacobian="dense" integrator="implicitfast"/>
  
