@@ -50,7 +50,7 @@
                         <body name="FL_wheel_link" pos="-0.16058 -0.23203 0.0085">
                             <inertial pos="-8.64884e-07 1.48905e-06 0.0253373" quat="-0.182657 0.683108 0.182657 0.683108" mass="0.973733" diaginertia="0.00560479 0.00285709 0.00285696"/>
                             <joint name="FL_wheel_joint" pos="0 0 0" axis="0 0 1" actuatorfrcrange="-36 36"/>
-                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="FL_wheel_link"/>
+                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="FL_wheel_link" friction="0.8 0.02 0.01"/>
                         </body>
                     </body>
                 </body>
@@ -71,7 +71,7 @@
                         <body name="FR_wheel_link" pos="0.16058 -0.23203 0.0084998">
                             <inertial pos="8.63201e-07 -1.4916e-06 0.0253373" quat="-0.183368 0.682917 0.183368 0.682917" mass="0.973733" diaginertia="0.00560479 0.00285709 0.00285696"/>
                             <joint name="FR_wheel_joint" pos="0 0 0" axis="0 0 -1" actuatorfrcrange="-36 36"/>
-                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="FR_wheel_link"/>
+                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="FR_wheel_link" friction="0.8 0.02 0.01"/>
                         </body>
                     </body>
                 </body>
@@ -92,7 +92,7 @@
                         <body name="RL_wheel_link" pos="-0.18172 -0.21587 0.0085002">
                             <inertial pos="-1.71551e-06 1.64158e-07 0.0253373" quat="0.523272 0.475591 -0.523272 0.475591" mass="0.973733" diaginertia="0.00560479 0.00285709 0.00285696"/>
                             <joint name="RL_wheel_joint" pos="0 0 0" axis="0 0 1" actuatorfrcrange="-36 36"/>
-                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="RL_wheel_link"/>
+                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="RL_wheel_link" friction="0.8 0.02 0.01"/>
                         </body>
                     </body>
                 </body>
@@ -113,7 +113,7 @@
                         <body name="RR_wheel_link" pos="0.18172 -0.21587 0.0085">
                             <inertial pos="1.00319e-06 -1.4068e-06 0.0253373" quat="-0.215371 0.67351 0.215371 0.67351" mass="0.973733" diaginertia="0.00560479 0.00285709 0.00285696"/>
                             <joint name="RR_wheel_joint" pos="0 0 0" axis="0 0 -1" actuatorfrcrange="-36 36"/>
-                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="RR_wheel_link"/>
+                            <geom type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="RR_wheel_link" friction="0.8 0.02 0.01"/>
                         </body>
                     </body>
                 </body>

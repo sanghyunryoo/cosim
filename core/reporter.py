@@ -366,12 +366,7 @@ class Reporter:
 
                 # --- Moving Average (same graph) ---
                 # window from config if provided; default = 20
-                if self.timesteps > 20:
-                    ma_win = 20
-                elif self.timesteps > 2:
-                    ma_win = int(self.timesteps/2)
-                else:
-                    ma_win = 1
+                ma_win = max(1, min(20, self.timesteps//2))
    
                 # compute simple moving average and align to times
                 kernel = np.ones(ma_win, dtype=float) / float(ma_win)
