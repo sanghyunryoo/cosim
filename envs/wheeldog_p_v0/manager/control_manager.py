@@ -1,6 +1,7 @@
 import random
 import copy
 
+
 class ControlManager:
     def __init__(self, config):
         self.prev_action = None

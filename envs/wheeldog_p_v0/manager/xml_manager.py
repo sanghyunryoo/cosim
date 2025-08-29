@@ -1,6 +1,8 @@
-import numpy as np
-import xml.etree.ElementTree as ET
 import os
+import xml.etree.ElementTree as ET
+
+import numpy as np
+
 
 class XMLManager:
     def __init__(self, config):

@@ -1,3 +1,7 @@
+import math
+import time
+import textwrap 
+
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for PDF export
 import matplotlib.pyplot as plt
@@ -5,10 +9,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Rectangle, FancyBboxPatch
 import matplotlib.patheffects as pe
 import numpy as np
-import math
-import time
 from cycler import cycler
-import textwrap  # For wrapping long strings in table cells
+
 
 palette = [
     "#E74C3C",  # Red

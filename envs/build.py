@@ -4,6 +4,7 @@ from envs.wheeldog_p_v0.wheeldog_p_v0 import WheelDogPV0
 from envs.humanoid_p_v0.humanoid_p_v0 import HumanoidPV0
 from envs.wrappers import StateBuildWrapper, TimeLimitWrapper, CommandWrapper
 
+
 def build_env(config):
     if config["env"]['id'] == "flamingo_p_v0":
       env = FlamingoPV0(config)

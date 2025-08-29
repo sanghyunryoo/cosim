@@ -3,12 +3,12 @@ from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.spaces import Box
 import numpy as np
 import mujoco
+import glfw
 from envs.humanoid_p_v0.manager.control_manager import ControlManager
 from envs.humanoid_p_v0.manager.xml_manager import XMLManager
 from envs.humanoid_p_v0.utils.math_utils import MathUtils
 from envs.humanoid_p_v0.utils.mujoco_utils import MuJoCoUtils
 from envs.humanoid_p_v0.utils.noise_generator_utils import truncated_gaussian_noisy_data, uniform_noisy_data
-import glfw
 
 
 class HumanoidPV0(MujocoEnv, utils.EzPickle):
