@@ -13,7 +13,7 @@ class XMLManager:
         self.precision_attr_map = config["random_table"]["precision"]
 
     def get_model_path(self):
-        original_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'flamingo_p_v0.xml')
+        original_model_path = os.path.join(self.cur_dir, '..', 'assets', 'xml', 'wheeldog_p_v0.xml')
         tree = ET.parse(original_model_path)
         root = tree.getroot()
 
