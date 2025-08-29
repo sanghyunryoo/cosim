@@ -205,6 +205,7 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
         return info
 
     def _is_done(self):
+        return False
         contact_forces = self.data.cfrc_ext[1:12]  # External contact forces
         base_contact = contact_forces[0] > 1.0
         hip_l_contact = contact_forces[1] > 1.0
