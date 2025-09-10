@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator
 
+
 class HardwareSettingsDialog(QDialog):
     def __init__(self, hardware_settings, parent):
         super().__init__(parent)

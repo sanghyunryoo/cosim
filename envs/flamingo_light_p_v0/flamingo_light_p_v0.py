@@ -71,7 +71,8 @@ class FlamingoLightPV0(MujocoEnv, utils.EzPickle):
             "lin_vel_z": 1,
             "projected_gravity": 3,
             "last_action": self.action_dim,
-            "height_map": int(self.res_x * self.res_y)
+            "height_map": int(self.res_x * self.res_y),
+            "command": self.config["observation"].get("command_dim", 0)
         }
 
         # Set MuJoCo Wrapper

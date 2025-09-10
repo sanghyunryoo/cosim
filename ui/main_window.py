@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         self._last_run_had_error = False
 
     def _init_window(self):
-        app_icon_path = os.path.join(os.path.dirname(__file__), "icon", "window_icon.png")
+        app_icon_path = os.path.join(os.path.dirname(__file__), "icons", "window_icon.png")
         self.setWindowIcon(QIcon(app_icon_path))
         self.setWindowTitle("cosim - v1.5.0")
         self.resize(750, 970)
@@ -109,10 +109,12 @@ class MainWindow(QMainWindow):
         # Apply default frequency and scale
         obs_dict = {}
         for obs in stacked_list:
-            obs_dict[obs] = {"freq": 50, "scale": to_float(obs_scales.get(obs, 1.0), 1.0)}
-
+            if obs != "command":
+                obs_dict[obs] = {"freq": 50, "scale": to_float(obs_scales.get(obs, 1.0), 1.0)}
+           
         for obs in non_stacked_list:
-            obs_dict[obs] = {"freq": 50, "scale": to_float(obs_scales.get(obs, 1.0), 1.0)}
+            if obs != "command":
+                obs_dict[obs] = {"freq": 50, "scale": to_float(obs_scales.get(obs, 1.0), 1.0)}
 
         for obs in self.obs_types:
             if obs not in obs_dict:
@@ -658,6 +660,7 @@ class MainWindow(QMainWindow):
         dialog = ObservationSettingsDialog((self.observation_settings).copy(), self)
         if dialog.exec_() == QDialog.Accepted:
             self.observation_settings = dialog.get_settings()
+            
             # Save current env settings back into the cache (so they restore next time)
             self.obs_settings_by_env[env_id] = (self.observation_settings).copy()
             # Mark that user manually changed settings (for reference)

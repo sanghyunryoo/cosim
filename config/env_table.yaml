@@ -3,7 +3,7 @@
 "flamingo_light_p_v0":
   "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
   "stack_size": 3
-  "non_stacked_obs_order": []
+  "non_stacked_obs_order": ["command"]
   "obs_scales":
     "dof_pos": 1.0
     "dof_vel": 1.0
@@ -12,7 +12,7 @@
     "lin_vel_y": 1.0
     "lin_vel_z": 1.0
   "command":
-    "command_dim": 3
+    "command_dim": 2
     "command_3_initial": 0
   "command_scales":
     "0": 1.0
@@ -32,7 +32,7 @@
 "flamingo_p_v0":
   "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
   "stack_size": 3
-  "non_stacked_obs_order": []
+  "non_stacked_obs_order": ["command"]
   "obs_scales":
     "dof_pos": 1.0
     "dof_vel": 0.15
@@ -71,7 +71,7 @@
 "wheeldog_p_v0":
   "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "lin_vel_x", "lin_vel_y", "lin_vel_z", "last_action"]
   "stack_size": 3
-  "non_stacked_obs_order": []
+  "non_stacked_obs_order": ["command"]
   "obs_scales":
     "dof_pos": 1.0
     "dof_vel": 0.15
@@ -84,7 +84,7 @@
     "command_3_initial": 0
   "command_scales":
     "0": 2.0
-    "1": 2.0
+    "1": 1.0
     "2": 0.25
     "3": 1.0
     "4": 1.0
@@ -110,7 +110,7 @@
 "humanoid_p_v0":
   "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action", "lin_vel_x", "lin_vel_y", "lin_vel_z"]
   "stack_size": 3
-  "non_stacked_obs_order": []
+  "non_stacked_obs_order": ["command"]
   "obs_scales":
     "dof_pos": 1.0
     "dof_vel": 0.15

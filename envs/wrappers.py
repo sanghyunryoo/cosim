@@ -32,7 +32,7 @@ class BaseEnv(ABC):
         pass
 
     @abstractmethod
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, SupportsFloat, bool, bool, dict]:
+    def step(self, action: np.ndarray):
         """
         Executes a step in the environment given an action.
 
@@ -101,6 +101,9 @@ class StateBuildWrapper(BaseEnv):
         self.control_freq = float(self.env.control_freq)
         if self.control_freq <= 0:
             raise ValueError(f"Invalid env.control_freq: {self.control_freq}. Must be > 0.")
+        
+        self.command_dim = config["observation"]["command_dim"]
+        assert self.command_dim > 0, "command_dim must be greater than 0."
 
         # Number of frames to stack (i=0 is the most recent frame)
         self.stack_size = int(self.config["observation"]["stack_size"])
@@ -113,12 +116,48 @@ class StateBuildWrapper(BaseEnv):
         self._stacked_obs_dim = sum(self.env.obs_to_dim[n] for n in self.stacked_obs_order)
         self._non_stacked_obs_dim = sum(self.env.obs_to_dim[n] for n in self.non_stacked_obs_order)
         self.state_dim = self.stack_size * self._stacked_obs_dim + self._non_stacked_obs_dim
+
+        # Cache command idx
+        self.cmd_slices = self._get_cmd_index_cache()
   
         # Rolling buffer for stacked observations (shape: [stack_size, stacked_obs_dim])
         self.obs_buffer = np.zeros((self.stack_size, self._stacked_obs_dim), dtype=np.float32)
 
         # Cache for frequency/scale-applied observation values
         self._freq_cache = {}
+
+    def _get_cmd_index_cache(self):
+        """
+        Collect and cache all slices that correspond to 'command' segments
+        within the final flattened state vector (stacked + non-stacked).
+        """
+        cmd_slices = []
+ 
+        if self.command_dim <= 0:
+            return
+  
+        # 1) in stacked_obs
+        off = 0
+        single_frame_cmd_starts = []
+        for name in self.stacked_obs_order:
+            if name == "command":
+                single_frame_cmd_starts.append(off)
+            off += self.env.obs_to_dim[name]
+
+        for k in range(self.stack_size):
+            base = k * self._stacked_obs_dim
+            for s in single_frame_cmd_starts:
+                cmd_slices.append(slice(base + s, base + s + self.command_dim))
+
+        # 2) in non_stacked_obs
+        base_non = self.stack_size * self._stacked_obs_dim
+        off = 0
+        for name in self.non_stacked_obs_order:
+            if name == "command":
+                cmd_slices.append(slice(base_non + off, base_non + off + self.command_dim))
+            off += self.env.obs_to_dim[name]
+
+        return cmd_slices
 
     def _concat_obs_with_freq(self, obs, names):
         """
@@ -137,23 +176,28 @@ class StateBuildWrapper(BaseEnv):
         """
         parts = []
         for n in names:
-            n_cfg = self.config["observation"][n]
-            update_freq = float(n_cfg["freq"])
-            scale = float(n_cfg["scale"])
+            if n == "command":
+                # Insert placeholder zeros for command (will be overwritten by CommandWrapper)
+                val = np.zeros((self.command_dim,), dtype=np.float32)
+                parts.append(val)
+            else:
+                n_cfg = self.config["observation"][n]
+                update_freq = float(n_cfg["freq"])
+                scale = float(n_cfg["scale"])
 
-            if update_freq <= 0:
-                raise ValueError(f"Invalid observation update frequency for '{n}': {update_freq}. Must be > 0.")
+                if update_freq <= 0:
+                    raise ValueError(f"Invalid observation update frequency for '{n}': {update_freq}. Must be > 0.")
 
-            # Steps between updates; at least 1 to avoid division artifacts
-            update_interval = max(1, int(round(self.control_freq / update_freq)))
-            need_update = (self.sim_step == 0) or (self.sim_step % update_interval == 0)
+                # Steps between updates; at least 1 to avoid division artifacts
+                update_interval = max(1, int(round(self.control_freq / update_freq)))
+                need_update = (self.sim_step == 0) or (self.sim_step % update_interval == 0)
 
-            if need_update or (n not in self._freq_cache):
-                val = np.asarray(obs[n], dtype=np.float32) * scale
-                self._freq_cache[n] = val
+                if need_update or (n not in self._freq_cache):
+                    val = np.asarray(obs[n], dtype=np.float32) * scale
+                    self._freq_cache[n] = val
 
-            parts.append(self._freq_cache[n].ravel().astype(np.float32))
-
+                parts.append(self._freq_cache[n].ravel().astype(np.float32))
+        
         if parts:
             return np.concatenate(parts, axis=0)
         else:
@@ -210,6 +254,7 @@ class StateBuildWrapper(BaseEnv):
         self._freq_cache.clear()
         init_obs, info = self.env.reset()
         init_state = self._build_state(init_obs, reset=True)
+
         return init_state, info
 
     def step(self, action: np.ndarray):
@@ -218,8 +263,8 @@ class StateBuildWrapper(BaseEnv):
         """
         assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         self.sim_step += 1
-        next_obs, terminated, truncated, info = self.env.step(action)
-        next_state = self._build_state(next_obs, reset=False)
+        next_obs_dict, terminated, truncated, info = self.env.step(action)
+        next_state = self._build_state(next_obs_dict, reset=False)
 
         if terminated or truncated:
             self.reset_flag = False
@@ -251,6 +296,8 @@ class TimeLimitWrapper(BaseEnv):
         self.id = env.id
         self.state_dim = env.state_dim
         self.action_dim = env.action_dim
+        self.command_dim = self.env.command_dim
+        self.cmd_slices = self.env.cmd_slices
         self.sim_step = 0
         self.max_sim_step = int(config["env"]["max_duration"] * self.env.control_freq)
         self.reset_flag = False
@@ -294,12 +341,12 @@ class CommandWrapper(BaseEnv):
         self.config = config
         self.id = env.id
         self.action_dim = env.action_dim
-        self.command_dim = config["observation"]["command_dim"]
-        self.state_dim = env.state_dim + self.command_dim
+        self.state_dim = env.state_dim 
+        self.cmd_slices = self.env.cmd_slices
+        self.command_dim = self.env.command_dim
         self.user_command = np.zeros(config["observation"]["command_dim"])
         self.applied_command = np.zeros(config["observation"]["command_dim"])
         self.reset_flag = False       
-        assert self.command_dim > 0, "command_dim must be greater than 0."
 
     def receive_user_command(self, user_command):
         self.user_command = user_command[:self.command_dim]
@@ -328,18 +375,29 @@ class CommandWrapper(BaseEnv):
 
             self.applied_command[0] = robot_x
             self.applied_command[1] = robot_y
+            
+    def _apply_command_inplace(self, state: np.ndarray) -> np.ndarray:
+        """
+        Overwrite every 'command' slot (stacked + non-stacked) with self.applied_command.
+        NO concatenation; the length of `state` remains unchanged.
+        """
+        if not self.cmd_slices:
+            return state
+        for s in self.cmd_slices:
+            state[s] = self.applied_command
+        return state
 
     def reset(self):
         self.reset_flag = True
         init_state, info = self.env.reset()
-        init_state = np.concatenate((init_state, np.zeros(self.config["observation"]["command_dim"])))
+        init_state = self._apply_command_inplace(init_state)
         return init_state, info
 
     def step(self, action: np.ndarray):
         assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, self.applied_command))
-
+        next_state = self._apply_command_inplace(next_state)
+   
         if self.command_dim == 2:
             info["user_command_0"] = self.user_command[0]
             info["user_command_1"] = self.user_command[1]

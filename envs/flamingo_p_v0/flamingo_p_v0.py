@@ -19,7 +19,7 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
         self.id = "flamingo_p_v0"
         self.config = config
         self.action_dim = 8
-        self.action_scaler = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 20.0, 20.0]
+        self.action_scaler = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 50.0, 50.0]
         self.render_mode = render_mode
         self.render_flag = render_flag
 
@@ -76,7 +76,8 @@ class FlamingoPV0(MujocoEnv, utils.EzPickle):
             "lin_vel_z": 1,
             "projected_gravity": 3,
             "last_action": self.action_dim,
-            "height_map": int(self.res_x * self.res_y)
+            "height_map": int(self.res_x * self.res_y),
+            "command": self.config["observation"].get("command_dim", 0)
         }
 
         # Set MuJoCo Wrapper

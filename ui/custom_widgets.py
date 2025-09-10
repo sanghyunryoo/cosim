@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QComboBox, QSlider, QPushButton
 
+
 # Ignore mouse wheel to prevent accidental selection changes
 class NoWheelComboBox(QComboBox):
     def wheelEvent(self, event):

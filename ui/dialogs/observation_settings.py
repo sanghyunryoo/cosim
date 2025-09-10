@@ -72,7 +72,7 @@ class ObservationSettingsDialog(QDialog):
         self.obs_types = [
             "dof_pos", "dof_vel", "ang_vel",
             "lin_vel_x", "lin_vel_y", "lin_vel_z",
-            "projected_gravity", "height_map", "last_action"
+            "projected_gravity", "height_map", "last_action", "command"
         ]
 
         # Saved settings (highest priority source)
@@ -117,7 +117,7 @@ class ObservationSettingsDialog(QDialog):
         self._inner_layout = QVBoxLayout(self._inner_widget)
 
         # ---- small hint label
-        obs_label = QLabel("State Order: [Stacked]  →  [Non-Stacked]  →  [Command]")
+        obs_label = QLabel("State Order: [Stacked]  →  [Non-Stacked]")
         obs_label.setAlignment(Qt.AlignCenter)
         obs_label.setStyleSheet(
             "QLabel { font-size: 7pt; color: #222; letter-spacing: 1px; }"
@@ -347,14 +347,16 @@ class ObservationSettingsDialog(QDialog):
         h.addWidget(combo)
 
         # freq
-        h.addWidget(QLabel("Freq:"))
+        freq_label = QLabel("Freq:")
+        h.addWidget(freq_label)
         freq_cb = NoWheelComboBox()
         freq_cb.addItems(["10", "25", "50"])
         freq_cb.setCurrentText(str(freq))
         h.addWidget(freq_cb)
 
         # scale (prefer saved or default scale for that obs)
-        h.addWidget(QLabel("Scale:"))
+        scale_label = QLabel("Scale:")
+        h.addWidget(scale_label)
         default_scale = self.get_default_scale(selected or combo.currentText())
         scale_cb = NoWheelComboBox()
         scale_cb.addItems(self._scale_options())
@@ -366,6 +368,13 @@ class ObservationSettingsDialog(QDialog):
         remove = QPushButton("Delete")
         remove.clicked.connect(lambda: self.remove_layout(h, self.stacked_container, self.stacked_rows))
         h.addWidget(remove)
+
+        # Initial toggle + connect signal to update dynamically
+        self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        combo.currentTextChanged.connect(
+            lambda _:
+                self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        )
 
         self.stacked_container.addLayout(h)
         self.stacked_rows.append({"layout": h, "combo": combo, "freq": freq_cb, "scale": scale_cb})
@@ -382,13 +391,17 @@ class ObservationSettingsDialog(QDialog):
             combo.setCurrentText(selected)
         h.addWidget(combo)
 
-        h.addWidget(QLabel("Freq:"))
+        # freq
+        freq_label = QLabel("Freq:")
+        h.addWidget(freq_label)
         freq_cb = NoWheelComboBox()
         freq_cb.addItems(["10", "25", "50"])
         freq_cb.setCurrentText(str(freq))
         h.addWidget(freq_cb)
 
-        h.addWidget(QLabel("Scale:"))
+        # scale (prefer saved or default scale for that obs)
+        scale_label = QLabel("Scale:")
+        h.addWidget(scale_label)
         default_scale = self.get_default_scale(selected or combo.currentText())
         scale_cb = NoWheelComboBox()
         scale_cb.addItems(self._scale_options())
@@ -399,6 +412,13 @@ class ObservationSettingsDialog(QDialog):
         remove = QPushButton("Delete")
         remove.clicked.connect(lambda: self.remove_layout(h, self.non_container, self.non_rows))
         h.addWidget(remove)
+
+        # Initial toggle + connect signal to update dynamically
+        self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        combo.currentTextChanged.connect(
+            lambda _:
+                self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        )
 
         self.non_container.addLayout(h)
         self.non_rows.append({"layout": h, "combo": combo, "freq": freq_cb, "scale": scale_cb})
@@ -454,8 +474,10 @@ class ObservationSettingsDialog(QDialog):
         # stacked rows
         for row in self.stacked_rows:
             obs_type = row["combo"].currentText()
-            if obs_type:
-                stacked_order.append(obs_type)
+            stacked_order.append(obs_type)
+            if obs_type in ["command", "height_map"]:
+                pass
+            else:
                 obs_dict[obs_type] = {
                     "freq": int(row["freq"].currentText()),
                     "scale": float(row["scale"].currentText())
@@ -464,20 +486,14 @@ class ObservationSettingsDialog(QDialog):
         # non-stacked rows
         for row in self.non_rows:
             obs_type = row["combo"].currentText()
-            if obs_type:
-                non_order.append(obs_type)
+            non_order.append(obs_type)
+            if obs_type in ["command", "height_map"]:
+                pass
+            else:
                 obs_dict[obs_type] = {
                     "freq": int(row["freq"].currentText()),
                     "scale": float(row["scale"].currentText())
                 }
-
-        # ensure all obs_types exist as keys (None if not selected)
-        for obs_type in self.obs_types:
-            if obs_type not in obs_dict:
-                obs_dict[obs_type] = None
-
-        # command_scales
-        command_scales = {str(i): float(cb.currentText()) for i, cb in enumerate(self.cmd_scale_cbs)}
 
         # height map detail
         sx = to_float(self.height_size_x_le.text(), 1.0)
@@ -490,10 +506,12 @@ class ObservationSettingsDialog(QDialog):
             "size_x": sx, "size_y": sy, "res_x": rx, "res_y": ry, "freq": hm_freq, "scale": hm_scale
         } if hm_selected else None
 
-        # Avoid duplicate/ambiguous "height_map" entry (details live in height_map above)
-        obs_dict.pop("height_map", None)
+        # command_scales
+        command_scales = {str(i): float(cb.currentText()) for i, cb in enumerate(self.cmd_scale_cbs)}
 
+        # stack_size
         stack_size = int(self.stack_size_cb.currentText())
+
         return {
             "stacked_obs_order": stacked_order,
             "non_stacked_obs_order": non_order,
@@ -543,3 +561,25 @@ class ObservationSettingsDialog(QDialog):
             self.parent_widget.env_config.get(env_id, {}).get("command", {}).get("command_dim", 6), 6
         )
         self.command_dim_cb.setCurrentText(str(self.settings.get("command_dim", default_cmd_dim)))
+
+
+    def update_row_widgets_for_obs(self, combo, freq_cb, scale_cb):
+        """
+        Update the enabled/disabled state of Freq/Scale widgets depending on the
+        selected observation type.
+        """
+  
+        # Scale widgets: visible, but disabled if obs_type == 'command'
+        cbs = [freq_cb, scale_cb]
+        if combo.currentText() == "command":
+            for cb in cbs:
+                cb.setEnabled(False)
+                cb.addItem("")
+                cb.setCurrentText("")
+        else:
+            for cb in cbs:
+                cb.setEnabled(True)
+                idx = cb.findText("")
+                if idx != -1:
+                    cb.removeItem(idx)
+                    cb.setCurrentText("1.0")
