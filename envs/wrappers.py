@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC, abstractmethod
-from typing import (Tuple, SupportsFloat)
+from typing import Tuple
 
 import numpy as np
 
@@ -103,7 +103,7 @@ class StateBuildWrapper(BaseEnv):
             raise ValueError(f"Invalid env.control_freq: {self.control_freq}. Must be > 0.")
         
         self.command_dim = config["observation"]["command_dim"]
-        assert self.command_dim > 0, "command_dim must be greater than 0."
+        assert self.command_dim >= 0, "command_dim must be equal or greater than 0."
 
         # Number of frames to stack (i=0 is the most recent frame)
         self.stack_size = int(self.config["observation"]["stack_size"])
@@ -134,9 +134,8 @@ class StateBuildWrapper(BaseEnv):
         cmd_slices = []
  
         if self.command_dim <= 0:
-            return
+            return cmd_slices
   
-        # 1) in stacked_obs
         off = 0
         single_frame_cmd_starts = []
         for name in self.stacked_obs_order:
@@ -149,7 +148,6 @@ class StateBuildWrapper(BaseEnv):
             for s in single_frame_cmd_starts:
                 cmd_slices.append(slice(base + s, base + s + self.command_dim))
 
-        # 2) in non_stacked_obs
         base_non = self.stack_size * self._stacked_obs_dim
         off = 0
         for name in self.non_stacked_obs_order:
@@ -379,10 +377,7 @@ class CommandWrapper(BaseEnv):
     def _apply_command_inplace(self, state: np.ndarray) -> np.ndarray:
         """
         Overwrite every 'command' slot (stacked + non-stacked) with self.applied_command.
-        NO concatenation; the length of `state` remains unchanged.
         """
-        if not self.cmd_slices:
-            return state
         for s in self.cmd_slices:
             state[s] = self.applied_command
         return state

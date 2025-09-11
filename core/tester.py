@@ -68,10 +68,13 @@ class Tester(QObject):
             self.receive_user_command()
             try:
                 action = self.policy.get_action(state)
-            except:
+            except Exception as e:
                 self.close()
                 self._had_error = True
-                raise RuntimeError("Failed to run inference with the selected ONNX policy.\nPlease check if you have chosen a valid ONNX file.")
+                raise RuntimeError(f"Failed to run inference with the selected ONNX policy: {self.policy_path}."
+                                   "\n\nPlease ensure that you have selected a valid ONNX file."
+                                   f"\n\nThe current state length (={state.shape[-1]}) may not match the input length expected by the ONNX policy"
+                                   ", which could have caused this error.\n") from e
 
             # Trigger event
             if self._push_event:

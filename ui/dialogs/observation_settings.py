@@ -1,47 +1,3 @@
-# ui/dialogs/observation_settings.py
-# -*- coding: utf-8 -*-
-"""
-Observation Settings dialog.
-
-Design goals
-------------
-1) Saved-first priority:
-   - Whatever the user saved with "OK" previously (passed in via `settings` from MainWindow)
-     MUST be reflected in the UI and used as defaults, regardless of YAML/env defaults.
-   - This dialog reads YAML/env defaults only as a fallback when a field isn't present in
-     saved settings.
-
-2) Robustness:
-   - All text inputs are validated (int/float) with sensible fallbacks.
-   - Height automatically adapts to content (dynamic rows + scroll area).
-
-3) Separation of concerns:
-   - The dialog is purely a view/editor of a settings dict. The caller (MainWindow)
-     is responsible for caching per-env settings and passing them back next time.
-     The dialog itself always prefers the provided `settings` over env defaults,
-     so whenever the caller passes previously saved values, the UI will display them.
-
-What gets returned by get_settings()
------------------------------------
-{
-  "stacked_obs_order": [...],
-  "non_stacked_obs_order": [...],
-  "stack_size": int,
-  "command_dim": int,
-  "command_scales": { "0": float, "1": float, ... },
-  "height_map": {
-      "size_x": float, "size_y": float, "res_x": int, "res_y": int,
-      "freq": int, "scale": float
-  } or None,
-  # Per-observation entries (for each obs in self.obs_types). If present in any order,
-  # value is {"freq": int, "scale": float}, otherwise None.
-  "dof_pos": {...} or None,
-  "dof_vel": {...} or None,
-  ...
-}
-
-"""
-
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QGroupBox, QGridLayout,
     QScrollArea, QLineEdit, QWidget, QDialogButtonBox, QSizePolicy, QApplication, QStyle
@@ -166,16 +122,18 @@ class ObservationSettingsDialog(QDialog):
         non_v.addWidget(add_non)
         non_group.setLayout(non_v)
 
-        # Two groups side-by-side
-        areas_layout = QHBoxLayout()
-        areas_layout.addWidget(stacked_group)
-        areas_layout.addWidget(non_group)
-        self._inner_layout.addLayout(areas_layout)
-
         # ---------------- Height Map detail (size/res) ----------------
         height_group = QGroupBox("Height Map")
         height_layout = QFormLayout()
+        # Compact layout for tight controls
+        height_layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        height_layout.setHorizontalSpacing(6)
+        height_layout.setVerticalSpacing(4)
+        height_layout.setContentsMargins(6, 6, 6, 6)
+
         size_res_layout = QHBoxLayout()
+        size_res_layout.setContentsMargins(0, 0, 0, 0)
+        size_res_layout.setSpacing(4)
 
         hm_yaml = env_cfg.get("height_map", {}) if isinstance(env_cfg.get("height_map", {}), dict) else {}
         hm_settings = self.settings.get("height_map", {}) if isinstance(self.settings.get("height_map", {}), dict) else {}
@@ -196,6 +154,7 @@ class ObservationSettingsDialog(QDialog):
         self.height_size_x_le.setFixedWidth(60)
         self.height_size_x_le.setPlaceholderText("x (m)")
         self.height_size_x_le.setValidator(double_validator)
+        self.height_size_x_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         size_res_layout.addWidget(self.height_size_x_le)
 
         # ×
@@ -206,16 +165,19 @@ class ObservationSettingsDialog(QDialog):
         self.height_size_y_le.setFixedWidth(60)
         self.height_size_y_le.setPlaceholderText("y (m)")
         self.height_size_y_le.setValidator(double_validator)
+        self.height_size_y_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         size_res_layout.addWidget(self.height_size_y_le)
 
         # Resolution label
-        size_res_layout.addWidget(QLabel("  Resolution:"))
+        res_lbl = QLabel("  Resolution:")
+        size_res_layout.addWidget(res_lbl)
 
         # Res X
         self.height_res_x_le = QLineEdit(str(hm_default["res_x"]))
         self.height_res_x_le.setFixedWidth(60)
         self.height_res_x_le.setPlaceholderText("res_x")
         self.height_res_x_le.setValidator(int_validator)
+        self.height_res_x_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         size_res_layout.addWidget(self.height_res_x_le)
 
         # ×
@@ -226,25 +188,35 @@ class ObservationSettingsDialog(QDialog):
         self.height_res_y_le.setFixedWidth(60)
         self.height_res_y_le.setPlaceholderText("res_y")
         self.height_res_y_le.setValidator(int_validator)
+        self.height_res_y_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         size_res_layout.addWidget(self.height_res_y_le)
 
         height_layout.addRow("Size (m):", size_res_layout)
         height_group.setLayout(height_layout)
-        self._inner_layout.addWidget(height_group)
 
         # ---------------- Command ----------------
         command_group = QGroupBox("Command")
         command_layout = QFormLayout()
+        # Compact layout for tight controls
+        command_layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        command_layout.setHorizontalSpacing(6)
+        command_layout.setVerticalSpacing(4)
+        command_layout.setContentsMargins(6, 6, 6, 6)
 
         # command_dim (1~6)
         self.command_dim_cb = NoWheelComboBox()
         self.command_dim_cb.addItems([str(i) for i in range(1, 7)])
         self.command_dim_cb.setCurrentText(str(cmd_dim_val))
+        self.command_dim_cb.setSizeAdjustPolicy(self.command_dim_cb.AdjustToContents)
+        self.command_dim_cb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         command_layout.addRow("Command Dim:", self.command_dim_cb)
 
         # Per-index scales grid
         self.command_scales_group = QGroupBox("Command Scales")
         self.command_scales_grid = QGridLayout(self.command_scales_group)
+        self.command_scales_grid.setContentsMargins(0, 0, 0, 0)
+        self.command_scales_grid.setHorizontalSpacing(4)
+        self.command_scales_grid.setVerticalSpacing(2)
         self.command_scales_grid.setColumnStretch(1, 1)
         self._rebuild_command_scales(command_scales_from_cfg, int(self.command_dim_cb.currentText()))
         self.command_dim_cb.currentTextChanged.connect(
@@ -254,7 +226,30 @@ class ObservationSettingsDialog(QDialog):
         )
         command_layout.addRow(self.command_scales_group)
         command_group.setLayout(command_layout)
-        self._inner_layout.addWidget(command_group)
+
+        # === Single 2x2 grid to tie column widths across both rows ===
+        # IMPORTANT:
+        # - Place Stacked and Non-Stacked in row 0, columns 0 and 1 (preserves their widths).
+        # - Place Height Map and Command in row 1, columns 0 and 1.
+        #   This makes bottom widths follow the same column widths as the top row.
+        quad_layout = QGridLayout()
+        quad_layout.setColumnStretch(0, 1)
+        quad_layout.setColumnStretch(1, 1)
+        quad_layout.setRowStretch(0, 0)
+        quad_layout.setRowStretch(1, 1)
+        quad_layout.setHorizontalSpacing(12)
+        quad_layout.setVerticalSpacing(12)
+
+        # Top row (unchanged width behavior, now anchored to grid columns)
+        quad_layout.addWidget(stacked_group, 0, 0)
+        quad_layout.addWidget(non_group,     0, 1)
+
+        # Bottom row (left = Height Map, right = Command) — same column widths as top
+        quad_layout.addWidget(height_group,  1, 0)
+        quad_layout.addWidget(command_group, 1, 1)
+
+        # Add the 2x2 grid into the scrollable inner layout
+        self._inner_layout.addLayout(quad_layout)
 
         # Put the inner widget into the scroll area
         self._scroll.setWidget(self._inner_widget)
@@ -266,7 +261,7 @@ class ObservationSettingsDialog(QDialog):
         self._outer_layout.addWidget(self._buttons)
 
         # Set width and auto-resize height after UI build
-        self.setMaximumWidth(900)
+        self.setMaximumWidth(1200)
         QTimer.singleShot(0, self._recalculate_height)
 
     # ---------- Sizing logic ----------
@@ -288,12 +283,12 @@ class ObservationSettingsDialog(QDialog):
             max_h = int(avail_h * 0.90)
 
             target_h = max(400, min(max_h, total_h))
-            self.resize(900, target_h)
+            self.resize(920, target_h)
         except Exception:
             # Fallback to a safe default if measurement fails
             scr = (self.screen() if hasattr(self, "screen") else None) or QApplication.primaryScreen()
             avail_h = scr.availableGeometry().height() if scr else 900
-            self.resize(900, int(avail_h * 0.90))
+            self.resize(920, int(avail_h * 0.90))
 
     # ---------- Command scale helpers ----------
 
@@ -330,6 +325,10 @@ class ObservationSettingsDialog(QDialog):
             cb.addItems(options)
             # Use exact match if available, otherwise fall back to "1.0"
             cb.setCurrentText(str(default_val) if str(default_val) in options else "1.0")
+            # Tight comboboxes
+            cb.setSizeAdjustPolicy(cb.AdjustToContents)
+            cb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
             self.command_scales_grid.addWidget(cb, row, 1)
             self.cmd_scale_cbs.append(cb)
 
@@ -562,14 +561,12 @@ class ObservationSettingsDialog(QDialog):
         )
         self.command_dim_cb.setCurrentText(str(self.settings.get("command_dim", default_cmd_dim)))
 
-
     def update_row_widgets_for_obs(self, combo, freq_cb, scale_cb):
         """
         Update the enabled/disabled state of Freq/Scale widgets depending on the
         selected observation type.
         """
-  
-        # Scale widgets: visible, but disabled if obs_type == 'command'
+        # Scale/Freq widgets: visible, but disabled if obs_type == 'command'
         cbs = [freq_cb, scale_cb]
         if combo.currentText() == "command":
             for cb in cbs:
