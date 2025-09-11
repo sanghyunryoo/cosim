@@ -5,7 +5,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
 
-# Project helpers
 from ui.utils import to_float, to_int, normalize_numkey_float_values
 from ui.custom_widgets import NoWheelComboBox
 
@@ -169,7 +168,7 @@ class ObservationSettingsDialog(QDialog):
         size_res_layout.addWidget(self.height_size_y_le)
 
         # Resolution label
-        res_lbl = QLabel("  Resolution:")
+        res_lbl = QLabel("     Resolution")
         size_res_layout.addWidget(res_lbl)
 
         # Res X
@@ -191,7 +190,7 @@ class ObservationSettingsDialog(QDialog):
         self.height_res_y_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         size_res_layout.addWidget(self.height_res_y_le)
 
-        height_layout.addRow("Size (m):", size_res_layout)
+        height_layout.addRow("Size (m)", size_res_layout)
         height_group.setLayout(height_layout)
 
         # ---------------- Command ----------------
@@ -209,7 +208,7 @@ class ObservationSettingsDialog(QDialog):
         self.command_dim_cb.setCurrentText(str(cmd_dim_val))
         self.command_dim_cb.setSizeAdjustPolicy(self.command_dim_cb.AdjustToContents)
         self.command_dim_cb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        command_layout.addRow("Command Dim:", self.command_dim_cb)
+        command_layout.addRow("Command Dimension", self.command_dim_cb)
 
         # Per-index scales grid
         self.command_scales_group = QGroupBox("Command Scales")
@@ -261,7 +260,6 @@ class ObservationSettingsDialog(QDialog):
         self._outer_layout.addWidget(self._buttons)
 
         # Set width and auto-resize height after UI build
-        self.setMaximumWidth(1200)
         QTimer.singleShot(0, self._recalculate_height)
 
     # ---------- Sizing logic ----------
@@ -283,15 +281,14 @@ class ObservationSettingsDialog(QDialog):
             max_h = int(avail_h * 0.90)
 
             target_h = max(400, min(max_h, total_h))
-            self.resize(920, target_h)
+            self.resize(930, target_h)
         except Exception:
             # Fallback to a safe default if measurement fails
             scr = (self.screen() if hasattr(self, "screen") else None) or QApplication.primaryScreen()
             avail_h = scr.availableGeometry().height() if scr else 900
-            self.resize(920, int(avail_h * 0.90))
+            self.resize(930, int(avail_h * 0.90))
 
     # ---------- Command scale helpers ----------
-
     def _rebuild_command_scales(self, command_scales_from_cfg: dict, cmd_dim: int):
         """
         Rebuild the (index, scale) grid based on current command_dim, preferring saved values.
@@ -333,7 +330,6 @@ class ObservationSettingsDialog(QDialog):
             self.cmd_scale_cbs.append(cb)
 
     # ---------- Dynamic row management ----------
-
     def add_stacked(self, selected: str = "", freq: int = 50, scale: float = 1.0):
         """Add one Stacked row: [obs_type][Freq][Scale][Delete]."""
         h = QHBoxLayout()
@@ -354,7 +350,7 @@ class ObservationSettingsDialog(QDialog):
         h.addWidget(freq_cb)
 
         # scale (prefer saved or default scale for that obs)
-        scale_label = QLabel("Scale:")
+        scale_label = QLabel("  Scale:")
         h.addWidget(scale_label)
         default_scale = self.get_default_scale(selected or combo.currentText())
         scale_cb = NoWheelComboBox()
@@ -399,7 +395,7 @@ class ObservationSettingsDialog(QDialog):
         h.addWidget(freq_cb)
 
         # scale (prefer saved or default scale for that obs)
-        scale_label = QLabel("Scale:")
+        scale_label = QLabel("  Scale:")
         h.addWidget(scale_label)
         default_scale = self.get_default_scale(selected or combo.currentText())
         scale_cb = NoWheelComboBox()
@@ -446,8 +442,7 @@ class ObservationSettingsDialog(QDialog):
                 break
         QTimer.singleShot(0, self._recalculate_height)
 
-    # ---------- Data extraction ----------
-
+    # ---------- Data extraction (height_map) ----------
     def _extract_height_map_freq_scale_from_rows(self):
         """
         Find the first 'height_map' row across stacked/non-stacked and
@@ -522,7 +517,6 @@ class ObservationSettingsDialog(QDialog):
         }
 
     # ---------- Saved-first population ----------
-
     def _load_existing_settings(self):
         """
         Apply saved settings into the UI (highest priority), falling back to env defaults
