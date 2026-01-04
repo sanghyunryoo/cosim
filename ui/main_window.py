@@ -1,52 +1,19 @@
 import os
 import yaml
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QPushButton, QLabel, QMessageBox, QMainWindow,
-    QFileDialog, QGroupBox, QScrollArea, QComboBox, QLineEdit, QSlider, QApplication, QCheckBox
+    QFileDialog, QGroupBox, QScrollArea, QLineEdit, QCheckBox, QDialog
 )
-from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt, QEvent, QUrl
-from PyQt5.QtGui import QDesktopServices, QIcon, QDoubleValidator, QIntValidator
+from PyQt5.QtCore import QThread, Qt, QEvent, QUrl
+from PyQt5.QtGui import QDesktopServices, QIcon
 from core.tester import Tester
-
-
-# Custom QComboBox that ignores mouse wheel events
-class NoWheelComboBox(QComboBox):
-    def wheelEvent(self, event):
-        event.ignore()
-
-
-# Custom QSlider that ignores mouse wheel events
-class NoWheelSlider(QSlider):
-    def wheelEvent(self, event):
-        event.ignore()
-
-
-# Button that ignores mouse clicks (only responds to keyboard input)
-class NonClickableButton(QPushButton):
-    def mousePressEvent(self, event):
-        event.ignore()
-
-    def mouseReleaseEvent(self, event):
-        event.ignore()
-
-
-class TesterWorker(QObject):
-    finished = pyqtSignal()
-    error = pyqtSignal(str)
-
-    def __init__(self, tester: Tester):
-        super().__init__()
-        self.tester = tester
-
-    def run(self):
-        try:
-            self.tester.init_user_command()
-            self.tester.test()
-        except Exception as e:
-            self.error.emit(str(e))
-        finally:
-            self.finished.emit()
+from ui.utils import to_float, to_int, normalize_numkey_float_values
+from ui.custom_widgets import NoWheelComboBox, NoWheelSlider, NonClickableButton
+from ui.dialogs.hardware_settings import HardwareSettingsDialog
+from ui.dialogs.observation_settings import ObservationSettingsDialog
+from ui.workers import TesterWorker
 
 
 class MainWindow(QMainWindow):
@@ -58,20 +25,25 @@ class MainWindow(QMainWindow):
         with open(config_path) as f:
             self.env_config = yaml.full_load(f)
 
+        self.obs_types = ["dof_pos", "dof_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "ang_vel", "projected_gravity", "height_map", "last_action"]
+
+        # Per-environment observation settings cache
+        self.obs_settings_by_env = {}
+
         self._init_window()
         self._init_variables()
         self._setup_ui()
         self._init_default_command_values()
-        self.status_label.setText("대기 중")
+        self.status_label.setText("Waiting ...")
         self.env_id_cb.currentTextChanged.connect(self.update_defaults)
         self.update_defaults(self.env_id_cb.currentText())
+        self._last_run_had_error = False
 
     def _init_window(self):
-        app_logo_path = os.path.join(os.path.dirname(__file__), "icon", "main_logo_128_128.png")
-        self.setWindowIcon(QIcon(app_logo_path))
-        self.setWindowTitle("cosim  -  v1.4.0")
-        self.resize(1060, 900)
-        # 기본적으로 메인 윈도우에 이벤트 필터를 설치
+        app_icon_path = os.path.join(os.path.dirname(__file__), "icons", "window_icon.png")
+        self.setWindowIcon(QIcon(app_icon_path))
+        self.setWindowTitle("cosim - v1.5.0")
+        self.resize(750, 970)
         self.installEventFilter(self)
 
     def _init_variables(self):
@@ -81,72 +53,155 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.tester = None
         self.current_command_values = [0.0] * 6
-
-        # Lists for command-related QLineEdit/QLabel widgets
         self.command_sensitivity_le_list = []
         self.max_command_value_le_list = []
         self.command_initial_value_le_list = []
         self.command_timer = None
+        self.hardware_settings = {}
+        self.hardware_settings_by_env = {}
 
-        # === Added: Observation Scales inputs ===
-        self.obs_scales_le = {}  # dict to hold QLineEdit for obs_scales
-        
+        # Whether the user manually changed observation settings via dialog (kept for reference; cache now used)
+        self.observation_overridden_by_user = False
+
+        # Initial observation_settings (will be overridden by update_defaults for the first env)
+        self.observation_settings = {
+            "stacked_obs_order": [],
+            "non_stacked_obs_order": [],
+            "stack_size": 3,
+            "command_dim": 6,
+            "command_scales": {"0": 1.0, "1": 1.0, "2": 1.0, "3": 1.0, "4": 1.0, "5": 1.0},
+            "height_map": {"size_x": 1.0, "size_y": 0.6, "res_x": 15, "res_y": 9, "freq": 50, "scale": 1.0},
+            "dof_pos": None,
+            "dof_vel": None,
+            "lin_vel_x": None,
+            "lin_vel_y": None,
+            "lin_vel_z": None,
+            "ang_vel": None,
+            "projected_gravity": None,
+            "last_action": None,
+        }
+
     def _init_default_command_values(self):
+        """Initialize current_command_values from the UI 'Initial Value' fields."""
         try:
-            self.current_command_values = [float(widget.text()) for widget in self.command_initial_value_le_list]
+            vals = []
+            for widget in self.command_initial_value_le_list:
+                if isinstance(widget, QLineEdit):
+                    vals.append(float(widget.text()))
+                elif isinstance(widget, QLabel):
+                    vals.append(float(widget.text()))
+                else:
+                    vals.append(0.0)
+            self.current_command_values = vals if len(vals) == 6 else [0.0] * 6
         except Exception:
             self.current_command_values = [0.0] * 6
 
-    def update_defaults(self, new_env_id):
-        settings = self.env_config.get(new_env_id)
-        h_settings = settings["hardware"]
-        # Update hardware settings
-        self.Kp_hip.setText(h_settings["Kp_hip"]) if h_settings.get("Kp_hip") else self.Kp_hip.setText("N/A")
-        self.Kp_leg.setText(h_settings["Kp_leg"]) if h_settings.get("Kp_leg") else self.Kp_leg.setText("N/A")
-        self.Kp_shoulder.setText(h_settings["Kp_shoulder"]) if h_settings.get("Kp_shoulder") else self.Kp_shoulder.setText("N/A")
-        self.Kd_hip.setText(h_settings["Kd_hip"]) if h_settings.get("Kd_hip") else self.Kd_hip.setText("N/A")
-        self.Kd_leg.setText(h_settings["Kd_leg"]) if h_settings.get("Kd_leg") else self.Kd_leg.setText("N/A")
-        self.Kd_shoulder.setText(h_settings["Kd_shoulder"]) if h_settings.get("Kd_shoulder") else self.Kd_shoulder.setText("N/A")
-        self.Kp_wheel.setText(h_settings["Kp_wheel"]) if h_settings.get("Kp_wheel") else self.Kp_wheel.setText("N/A")
-        self.Kd_wheel.setText(h_settings["Kd_wheel"]) if h_settings.get("Kd_wheel") else self.Kd_wheel.setText("N/A")
-        self.joint_max_torque_le.setText(h_settings["joint_max_torque"])
-        self.wheel_max_torque_le.setText(h_settings["wheel_max_torque"])
+    # -------- observation defaults/caching --------
+    def _make_observation_defaults(self, env_id: str):
+        env_cfg = self.env_config.get(env_id, {}) or {}
+        cmd_cfg_raw = env_cfg.get("command", {}) if isinstance(env_cfg.get("command", {}), dict) else {}
+        obs_scales = env_cfg.get("obs_scales", {}) or {}
+        command_scales_cfg = normalize_numkey_float_values(env_cfg.get("command_scales", {}))
+        stacked_list = env_cfg.get("stacked_obs_order", []) or []
+        non_stacked_list = env_cfg.get("non_stacked_obs_order", []) or []
+        stack_size_yaml = to_int(env_cfg.get("stack_size", 3), 3)
 
-        # Optional env settings
-        env_settings = settings.get("env")
-        if isinstance(env_settings, dict):
-            observation_dim = env_settings["observation_dim"]
-            action_dim = env_settings["action_dim"]
-            command_dim = env_settings["command_dim"]
-            command_0_max = "1.5"
-            command_1_max = "1.5"
+        # Apply default frequency and scale
+        obs_dict = {}
+        for obs in stacked_list:
+            if obs != "command":
+                obs_dict[obs] = {"freq": 50, "scale": to_float(obs_scales.get(obs, 1.0), 1.0)}
+           
+        for obs in non_stacked_list:
+            if obs != "command":
+                obs_dict[obs] = {"freq": 50, "scale": to_float(obs_scales.get(obs, 1.0), 1.0)}
 
-            if command_dim is not None:
-                self.command_dim_le.setText(str(command_dim))
-            if action_dim is not None:
-                self.action_dim_le.setText(str(action_dim))
-            if observation_dim is not None:
-                self.observation_dim_le.setText(str(observation_dim))
-            if command_0_max is not None:
-                self.max_command_value_le_list[0].setText(command_0_max)
-            if command_1_max is not None:
-                self.max_command_value_le_list[2].setText(command_1_max)
+        for obs in self.obs_types:
+            if obs not in obs_dict:
+                obs_dict[obs] = None
 
-        # Update command[3] initial value
-        if isinstance(self.command_initial_value_le_list[3], QLineEdit):
-            self.command_initial_value_le_list[3].setText(env_settings["command_3_initial"])
+        cmd_dim = to_int(cmd_cfg_raw.get("command_dim", 6), 6)
 
-        # === Added: Update Observation Scales on env change ===
-        obs_scales = settings.get("obs_scales", {})
-        for key, le in self.obs_scales_le.items():
-            if key in obs_scales:
-                le.setText(str(obs_scales[key]))
-        
-        scale_commands = obs_scales.get("scale_commands", True)
-        if scale_commands:
-            self.scale_commands_cb.setCurrentText("True")
+        merged_command_scales = {}
+        for i in range(cmd_dim):
+            key = str(i)
+            merged_command_scales[key] = to_float(command_scales_cfg.get(key, 1.0), 1.0)
+
+        height_in_order = ("height_map" in stacked_list) or ("height_map" in non_stacked_list)
+        if height_in_order:
+            height_map_yaml = env_cfg.get("height_map", {}) if isinstance(env_cfg.get("height_map", {}), dict) else {}
+            height_map_val = {
+                "size_x": to_float(height_map_yaml.get("size_x", 1.0)),
+                "size_y": to_float(height_map_yaml.get("size_y", 0.6)),
+                "res_x": to_int(height_map_yaml.get("res_x", 15)),
+                "res_y": to_int(height_map_yaml.get("res_y", 9)),
+                "freq": 50,
+                "scale": 1.0,
+            }
         else:
-            self.scale_commands_cb.setCurrentText("False")     
+            height_map_val = None
+
+        return {
+            "stacked_obs_order": stacked_list,
+            "non_stacked_obs_order": non_stacked_list,
+            "stack_size": stack_size_yaml,
+            "command_dim": cmd_dim,
+            "command_scales": merged_command_scales,
+            "height_map": height_map_val,
+            **obs_dict
+        }
+
+    def _ensure_observation_defaults(self):
+        # If not in cache, create defaults for the current env
+        env_id = self.env_id_cb.currentText()
+        if env_id not in self.obs_settings_by_env:
+            self.obs_settings_by_env[env_id] = self._make_observation_defaults(env_id)
+        # Sync current observation_settings with latest cache
+        self.observation_settings = (self.obs_settings_by_env[env_id]).copy()
+
+    # ---------------- per-env hardware helpers (like observation) ----------------
+    def _make_hardware_defaults(self, env_id: str):
+        """Build default hardware settings for the env from YAML (shallow copy)."""
+        env_cfg = self.env_config.get(env_id, {}) or {}
+        hw = env_cfg.get("hardware", {}) or {}
+        # Keep string values (editable in dialog). Numeric conversion is done in _gather_config.
+        return hw.copy()
+
+    def _ensure_hardware_defaults(self):
+        """Ensure current env has cached hardware settings and sync self.hardware_settings."""
+        env_id = self.env_id_cb.currentText()
+        if env_id not in self.hardware_settings_by_env:
+            self.hardware_settings_by_env[env_id] = self._make_hardware_defaults(env_id)
+        self.hardware_settings = (self.hardware_settings_by_env[env_id]).copy()
+
+    def update_defaults(self, new_env_id):
+        settings = self.env_config.get(new_env_id, {}) or {}
+        if new_env_id in self.hardware_settings_by_env:
+            self.hardware_settings = (self.hardware_settings_by_env[new_env_id]).copy()
+        else:
+            self.hardware_settings = self._make_hardware_defaults(new_env_id)
+            self.hardware_settings_by_env[new_env_id] = (self.hardware_settings).copy()
+
+        cmd_cfg = settings.get("command", {}) if isinstance(settings.get("command", {}), dict) else {}
+
+        # UI upper bounds (example retained)
+        command_0_max = "1.5"
+        command_2_max = "1.5"
+        if self.max_command_value_le_list:
+            self.max_command_value_le_list[0].setText(command_0_max)
+            self.max_command_value_le_list[2].setText(command_2_max)
+
+        # command[3] initial value (accept float/int)
+        if self.command_initial_value_le_list and isinstance(self.command_initial_value_le_list[3], QLineEdit):
+            c3 = cmd_cfg.get("command_3_initial", 0.0)
+            self.command_initial_value_le_list[3].setText(str(to_float(c3, 0.0)))
+
+        # On environment change: observation settings via cache or defaults
+        if new_env_id in self.obs_settings_by_env:
+            self.observation_settings = (self.obs_settings_by_env[new_env_id]).copy()
+        else:
+            self.observation_settings = self._make_observation_defaults(new_env_id)
+            self.obs_settings_by_env[new_env_id] = (self.observation_settings).copy()
 
     def showEvent(self, event):
         self.centralWidget().setFocus()
@@ -185,7 +240,10 @@ class MainWindow(QMainWindow):
 
     def _get_default_command_value(self, index):
         try:
-            return float(self.command_initial_value_le_list[index].text())
+            widget = self.command_initial_value_le_list[index]
+            if isinstance(widget, (QLineEdit, QLabel)):
+                return float(widget.text())
+            return 0.0
         except Exception:
             return 0.0
 
@@ -212,6 +270,7 @@ class MainWindow(QMainWindow):
         self._update_status_label()
 
     def send_current_command(self):
+        # Apply key-driven deltas within bounds, update tester and status
         for key_info in self.active_keys.values():
             cmd_index = key_info["cmd_index"]
             direction = key_info["direction"]
@@ -225,7 +284,6 @@ class MainWindow(QMainWindow):
                 new_value = max(new_value, -max_command_value)
             self.current_command_values[cmd_index] = new_value
             self._update_command_button(cmd_index, new_value)
-
         if self.tester:
             for i, value in enumerate(self.current_command_values):
                 self.tester.update_command(i, value)
@@ -237,9 +295,8 @@ class MainWindow(QMainWindow):
         except Exception:
             return default
 
-    # ---------------------------------------------------------------------
-    #                               UI SETUP
-    # ---------------------------------------------------------------------
+    # ---------------- UI SETUP ----------------
+
     def _setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -247,12 +304,11 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
-        # Top area: Left (configuration) and right (command settings/input)
         top_h_layout = QHBoxLayout()
         top_h_layout.setSpacing(15)
         main_layout.addLayout(top_h_layout)
 
-        # Left: Configuration settings in a scrollable area
+        # Left: scroll area (Policy placed below Environment)
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
         top_h_layout.addWidget(config_scroll, 3)
@@ -261,22 +317,27 @@ class MainWindow(QMainWindow):
         self.config_layout = QVBoxLayout(config_widget)
         self.config_layout.setContentsMargins(10, 10, 10, 10)
         self.config_layout.setSpacing(15)
-        self._create_top_config_groups()
-        self._create_hardware_group()
+
+        # Vertical: Policy under Environment
+        self._create_env_group(self.config_layout)
+        self._create_policy_group(self.config_layout)
+
+        # Random Settings group
         self._create_random_group()
 
-        # Right: Command settings and key input visual buttons
+        # Place Event Input on the left (under Random Settings)
+        self._create_event_input_group(self.config_layout)
+
+        # Right: Command Settings / Command Input
         right_v_layout = QVBoxLayout()
         top_h_layout.addLayout(right_v_layout, 1)
         self._create_command_settings_group(right_v_layout)
         self._setup_key_visual_buttons(right_v_layout)
-        self._create_event_input_group(right_v_layout)  # Added for push event
 
         self.status_label = QLabel("대기 중")
         self.status_label.setStyleSheet("font-size: 14px;")
         main_layout.addWidget(self.status_label)
 
-        # Bottom: Start/Stop buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         self.start_button = QPushButton("Start Test")
@@ -289,10 +350,8 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         btn_layout.addWidget(self.stop_button)
         main_layout.addLayout(btn_layout)
-
         self._apply_styles()
 
-    # Added method for push event UI
     def _create_event_input_group(self, parent_layout):
         event_group = QGroupBox("Event Input")
         event_group.setStyleSheet(
@@ -304,7 +363,6 @@ class MainWindow(QMainWindow):
         event_layout.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         event_layout.setSpacing(8)
         event_group.setLayout(event_layout)
-
         push_vel_layout = QHBoxLayout()
         self.push_vel_x_le = QLineEdit("0.0")
         self.push_vel_x_le.setPlaceholderText("x")
@@ -318,17 +376,13 @@ class MainWindow(QMainWindow):
         push_vel_layout.addWidget(self.push_vel_x_le)
         push_vel_layout.addWidget(self.push_vel_y_le)
         push_vel_layout.addWidget(self.push_vel_z_le)
-
         event_layout.addRow("Push Velocity (x, y, z):", push_vel_layout)
-
         self.push_button = QPushButton("Push")
         self.push_button.pressed.connect(self.activate_push_trigger)
         self.push_button.released.connect(self.deactivate_push_trigger)
         event_layout.addRow(self.push_button)
-
         parent_layout.addWidget(event_group)
 
-    # Added method to handle push event activation
     def activate_push_trigger(self):
         if self.tester:
             try:
@@ -341,33 +395,11 @@ class MainWindow(QMainWindow):
             except ValueError:
                 QMessageBox.warning(self, "Invalid Input", "Push velocity must be numeric values.")
 
-    # Added method to handle push event deactivation
     def deactivate_push_trigger(self):
         if self.tester:
             self.tester.deactivate_push_event()
 
-    # ---------------------------------------------------------------------
-    #       CONFIG GROUPS  (env, policy, obs_scales are now separate)
-    # ---------------------------------------------------------------------
-    def _create_top_config_groups(self):
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(15)
-        self.config_layout.addLayout(top_layout)
-
-        # Environment group on the left
-        self._create_env_group(top_layout)
-
-        # Container (vertical) on the right for Policy + Observation Scales
-        policy_container = QVBoxLayout()
-        policy_container.setSpacing(10)
-        top_layout.addLayout(policy_container, 1)
-
-        # Policy Settings group
-        self._create_policy_group(policy_container)
-
-        # Observation Scales group (now OUTSIDE Policy Settings)
-        obs_group = self._create_obs_scales_group()
-        policy_container.addWidget(obs_group, 0)
+    # --------- CONFIG GROUPS ---------
 
     def _create_env_group(self, parent_layout):
         env_group = QGroupBox("Environment Settings")
@@ -380,11 +412,23 @@ class MainWindow(QMainWindow):
         env_layout.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         env_layout.setSpacing(8)
         env_group.setLayout(env_layout)
-
         self.env_id_cb = NoWheelComboBox()
         self.env_id_cb.addItems(self.env_config.keys())
-        self.env_id_cb.setCurrentText("flamingo_v1_5_1")
+
+        default_env = list(self.env_config.keys())[0]
+        self.env_id_cb.setCurrentText(default_env)
         env_layout.addRow("ID:", self.env_id_cb)
+
+        self.max_duration_le = QLineEdit("120.0")
+        env_layout.addRow("Max Duration (s):", self.max_duration_le)
+
+        settings_btn = QPushButton("Hardware Settings")
+        settings_btn.clicked.connect(self.open_hardware_settings)
+        env_layout.addRow("Hardware:", settings_btn)
+
+        obs_settings_btn = QPushButton("Observation Settings")
+        obs_settings_btn.clicked.connect(self.open_observation_settings)
+        env_layout.addRow("Observation:", obs_settings_btn)
 
         self.terrain_id_cb = NoWheelComboBox()
         self.terrain_id_cb.addItems([
@@ -394,74 +438,6 @@ class MainWindow(QMainWindow):
         ])
         self.terrain_id_cb.setCurrentText("flat")
         env_layout.addRow("Terrain:", self.terrain_id_cb)
-
-        self.max_duration_le = QLineEdit("120.0")
-        env_layout.addRow("Max Duration (s):", self.max_duration_le)
-        self.observation_dim_le = QLineEdit("20")
-        env_layout.addRow("Observation Dim:", self.observation_dim_le)
-        self.command_dim_le = QLineEdit("6")
-        env_layout.addRow("Command Dim:", self.command_dim_le)
-        self.action_dim_le = QLineEdit("8")
-        env_layout.addRow("Action Dim:", self.action_dim_le)
-
-        self.action_in_state_cb = NoWheelComboBox()
-        self.action_in_state_cb.addItems(["True", "False"])
-        self.action_in_state_cb.setCurrentText("True")
-        env_layout.addRow("Action in State:", self.action_in_state_cb)
-
-        self.num_stack_cb = NoWheelComboBox()
-        self.num_stack_cb.addItems([str(i) for i in range(1, 16)])
-        self.num_stack_cb.setCurrentText("3")
-        env_layout.addRow("Num Stack:", self.num_stack_cb)
-
-        self.external_sensors_cb = NoWheelComboBox()
-        self.external_sensors_cb.addItems(["height_map", "scaled_base_lin_vel", "All", "None"])
-        self.external_sensors_cb.setCurrentText("None")
-        env_layout.addRow("External Sensors:", self.external_sensors_cb)
-
-        self.external_sensors_Hz_cb = NoWheelComboBox()
-        self.external_sensors_Hz_cb.addItems(["10"])
-        self.external_sensors_Hz_cb.setCurrentText("10")
-        env_layout.addRow("External Sensors Hz:", self.external_sensors_Hz_cb)
-
-        self.height_size_x_le = QLineEdit()
-        self.height_size_x_le.setFixedWidth(50)
-        self.height_size_x_le.setPlaceholderText("x (m)")
-        double_validator = QDoubleValidator(0.000001, 1e6, 4)  
-        double_validator.setNotation(QDoubleValidator.StandardNotation)
-        self.height_size_x_le.setValidator(double_validator)
-        self.height_size_x_le.setText("1.0")  
-
-        self.height_size_y_le = QLineEdit()
-        self.height_size_y_le.setFixedWidth(50)
-        self.height_size_y_le.setPlaceholderText("y (m)")
-        self.height_size_y_le.setValidator(double_validator)
-        self.height_size_y_le.setText("0.6")   
-
-        self.height_res_x_le = QLineEdit()
-        self.height_res_x_le.setFixedWidth(50)
-        self.height_res_x_le.setPlaceholderText("x_res")
-        int_validator = QIntValidator(1, 10000)  
-        self.height_res_x_le.setValidator(int_validator)
-        self.height_res_x_le.setText("15")      
-
-        self.height_res_y_le = QLineEdit()
-        self.height_res_y_le.setFixedWidth(50)
-        self.height_res_y_le.setPlaceholderText("y_res")
-        self.height_res_y_le.setValidator(int_validator)
-        self.height_res_y_le.setText("9")      
-
-        size_res_layout = QHBoxLayout()
-        size_res_layout.setSpacing(4)
-        size_res_layout.addWidget(self.height_size_x_le)
-        size_res_layout.addWidget(QLabel("×"))
-        size_res_layout.addWidget(self.height_size_y_le)
-        size_res_layout.addWidget(QLabel(" Res:"))
-        size_res_layout.addWidget(self.height_res_x_le)
-        size_res_layout.addWidget(QLabel("×"))
-        size_res_layout.addWidget(self.height_res_y_le)
-        env_layout.addRow("Height Map Size (m):", size_res_layout)
-
         parent_layout.addWidget(env_group, 1)
 
     def _create_policy_group(self, parent_layout):
@@ -475,18 +451,14 @@ class MainWindow(QMainWindow):
         policy_layout.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
         policy_layout.setSpacing(8)
         policy_group.setLayout(policy_layout)
-
         self.use_lstm_cb = NoWheelComboBox()
         self.use_lstm_cb.addItems(["True", "False"])
         self.use_lstm_cb.setCurrentText("False")
         policy_layout.addRow("Use LSTM:", self.use_lstm_cb)
-
         self.h_in_dim_le = QLineEdit("256")
         policy_layout.addRow("h_in Dim:", self.h_in_dim_le)
         self.c_in_dim_le = QLineEdit("256")
         policy_layout.addRow("c_in Dim:", self.c_in_dim_le)
-
-        # ONNX File
         self.policy_file_le = QLineEdit()
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self.browse_policy_file)
@@ -494,149 +466,7 @@ class MainWindow(QMainWindow):
         file_layout.addWidget(self.policy_file_le)
         file_layout.addWidget(browse_btn)
         policy_layout.addRow("ONNX File:", file_layout)
-
         parent_layout.addWidget(policy_group, 0)
-
-    # ---- Observation Scales Group ----
-    def _create_obs_scales_group(self):
-        obs_group = QGroupBox("Observation Scales")
-        obs_group.setStyleSheet(
-            "QGroupBox { font-weight: bold; border: 1px solid gray; border-radius: 5px; margin-top: 10px; }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }"
-        )
-        obs_form = QFormLayout()
-        obs_form.setLabelAlignment(Qt.AlignLeft)
-        obs_form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
-        obs_form.setSpacing(8)
-        obs_group.setLayout(obs_form)
-
-        settings = self.env_config[self.env_id_cb.currentText()]
-        obs_scales = settings.get("obs_scales", {})
-
-        for key in ["lin_vel", "ang_vel", "dof_pos", "dof_vel"]:
-            default = obs_scales.get(key, 1.0)
-            le = QLineEdit(str(default))
-            le.setFixedWidth(50)
-            obs_form.addRow(f"{key}:", le)
-            self.obs_scales_le[key] = le
-     
-        self.scale_commands_cb = NoWheelComboBox()
-        self.scale_commands_cb.addItems(["True", "False"])
-        scale_commands = obs_scales.get("scale_commands", True)
-        if scale_commands:
-            self.scale_commands_cb.setCurrentText("True")
-        else:
-            self.scale_commands_cb.setCurrentText("False")        
-        obs_form.addRow("scale_commands:", self.scale_commands_cb)
-
-        return obs_group
-
-    def _create_hardware_group(self):
-        hardware_group = QGroupBox("Hardware Settings")
-        hardware_group.setStyleSheet(
-            "QGroupBox { font-weight: bold; border: 1px solid gray; border-radius: 5px; margin-top: 5px; padding: 2px; }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 5px; padding: 0 2px; }"
-        )
-
-        v_layout_main = QVBoxLayout()
-        v_layout_main.setContentsMargins(2, 2, 2, 2)
-        v_layout_main.setSpacing(10)
-        v_layout_main.setAlignment(Qt.AlignLeft)
-        hardware_group.setLayout(v_layout_main)
-
-        settings = self.env_config.get(self.env_id_cb.currentText(), {})
-
-        joints = [
-            ("Hip", settings.get("Kp_hip", "0.0"), settings.get("Kd_hip", "0.0")),
-            ("Shoulder", settings.get("Kp_shoulder", "0.0"), settings.get("Kd_shoulder", "0.0")),
-            ("Leg", settings.get("Kp_leg", "0.0"), settings.get("Kd_leg", "0.0")),
-            ("Wheel", settings.get("Kp_wheel", "0.0"), settings.get("Kd_wheel", "0.0"))
-        ]
-
-        def create_line_edit(default_value):
-            le = QLineEdit(str(default_value))
-            le.setFixedWidth(45)
-            le.setAlignment(Qt.AlignLeft)
-            font = le.font()
-            font.setPointSize(6)
-            le.setFont(font)
-            return le
-
-        gains_layout = QHBoxLayout()
-        gains_layout.setContentsMargins(2, 2, 2, 2)
-        gains_layout.setSpacing(10)
-        gains_layout.setAlignment(Qt.AlignLeft)
-        v_layout_main.addLayout(gains_layout)
-
-        for joint_name, kp, kd in joints:
-            joint_widget = QWidget()
-            v_layout = QVBoxLayout(joint_widget)
-            v_layout.setContentsMargins(1, 1, 1, 1)
-            v_layout.setSpacing(2)
-            v_layout.setAlignment(Qt.AlignLeft)
-
-            joint_label = QLabel(joint_name)
-            joint_label.setAlignment(Qt.AlignLeft)
-            font_label = joint_label.font()
-            font_label.setPointSize(6)
-            joint_label.setFont(font_label)
-            v_layout.addWidget(joint_label)
-
-            gains_sub_layout = QHBoxLayout()
-            gains_sub_layout.setContentsMargins(1, 1, 1, 1)
-            gains_sub_layout.setSpacing(2)
-            gains_sub_layout.setAlignment(Qt.AlignLeft)
-
-            p_label = QLabel("P:")
-            p_label.setAlignment(Qt.AlignLeft)
-            p_label.setFont(font_label)
-            p_gain = create_line_edit(kp)
-            d_label = QLabel("D:")
-            d_label.setAlignment(Qt.AlignLeft)
-            d_label.setFont(font_label)
-            d_gain = create_line_edit(kd)
-
-            gains_sub_layout.addWidget(p_label)
-            gains_sub_layout.addWidget(p_gain)
-            gains_sub_layout.addWidget(d_label)
-            gains_sub_layout.addWidget(d_gain)
-            v_layout.addLayout(gains_sub_layout)
-            gains_layout.addWidget(joint_widget)
-
-            if joint_name.lower() == "hip":
-                self.Kp_hip, self.Kd_hip = p_gain, d_gain
-            elif joint_name.lower() == "shoulder":
-                self.Kp_shoulder, self.Kd_shoulder = p_gain, d_gain
-            elif joint_name.lower() == "leg":
-                self.Kp_leg, self.Kd_leg = p_gain, d_gain
-            elif joint_name.lower() == "wheel":
-                self.Kp_wheel, self.Kd_wheel = p_gain, d_gain
-
-        torque_layout = QHBoxLayout()
-        torque_layout.setContentsMargins(2, 2, 2, 2)
-        torque_layout.setSpacing(15)
-        torque_layout.setAlignment(Qt.AlignLeft)
-
-        joint_max_torque_label = QLabel("Joint Max Torque:")
-        joint_max_torque_label.setAlignment(Qt.AlignLeft)
-        joint_max_torque_label.setStyleSheet("font-size: 12px;")
-        joint_max_torque_value = settings.get("joint_max_torque", "100")
-        self.joint_max_torque_le = create_line_edit(joint_max_torque_value)
-
-        torque_layout.addWidget(joint_max_torque_label)
-        torque_layout.addWidget(self.joint_max_torque_le)
-
-        wheel_max_torque_label = QLabel("Wheel Max Torque:")
-        wheel_max_torque_label.setAlignment(Qt.AlignLeft)
-        wheel_max_torque_label.setStyleSheet("font-size: 12px;")
-        wheel_max_torque_value = settings.get("wheel_max_torque", "100")
-        self.wheel_max_torque_le = create_line_edit(wheel_max_torque_value)
-
-        torque_layout.addWidget(wheel_max_torque_label)
-        torque_layout.addWidget(self.wheel_max_torque_le)
-
-        v_layout_main.addLayout(torque_layout)
-        self.config_layout.addWidget(hardware_group)
 
     def _create_random_group(self):
         random_group = QGroupBox("Random Settings")
@@ -701,109 +531,69 @@ class MainWindow(QMainWindow):
         grid_layout.addWidget(QLabel("Max Value"), 0, 2)
         grid_layout.addWidget(QLabel("Initial Value"), 0, 3)
 
-        settings = self.env_config.get(self.env_id_cb.currentText())
-        for i in range(6):
+        # command[3] initial value is taken from the env's 'command' section
+        settings = self.env_config.get(self.env_id_cb.currentText(), {}) or {}
+        cmd_cfg = settings.get("command", {}) if isinstance(settings.get("command", {}), dict) else {}
+        cmd3_init = str(to_float(cmd_cfg.get("command_3_initial", 0.0), 0.0))
+
+        for i in range(6):  # indices 0~5
             label = QLabel(f"command[{i}]")
             sensitivity_le = QLineEdit("0.02")
             max_value_le = QLineEdit("1.5" if i in [0, 1, 2] else "1")
-            init_value_widget = QLineEdit(settings["env"]["command_3_initial"]) if i == 3 else QLabel("0.0")
-
+            init_value_widget = QLineEdit(cmd3_init) if i == 3 else QLabel("0.0")
             grid_layout.addWidget(label, i + 1, 0)
             grid_layout.addWidget(sensitivity_le, i + 1, 1)
             grid_layout.addWidget(max_value_le, i + 1, 2)
             grid_layout.addWidget(init_value_widget, i + 1, 3)
-
             self.command_sensitivity_le_list.append(sensitivity_le)
             self.max_command_value_le_list.append(max_value_le)
             self.command_initial_value_le_list.append(init_value_widget)
-
         self.position_command_cb = QCheckBox("Position Command")
         self.position_command_cb.setChecked(False)
-        row_position = 6 + 1   # Add the checkbox below the 6 command rows (index 1–6 used)
+        row_position = 6 + 1
         grid_layout.addWidget(self.position_command_cb, row_position, 0, 1, 4, Qt.AlignLeft)
-        
         parent_layout.addWidget(command_group)
 
     def _setup_key_visual_buttons(self, parent_layout):
         button_style = (
             "NonClickableButton { background-color: #3C3F41; border: none; color: #FFFFFF; "
-            "font-size: 11px; padding: 10px; border-radius: 10px; min-width: 50px; min-height: 50px; }"
+            "font-size: 11px; padding: 10px; border-radius: 10px; min-width: 36px; min-height: 36px; }"
             "NonClickableButton:checked { background-color: #4E94D4; }"
         )
         key_group = QGroupBox("Command Input")
         key_layout = QVBoxLayout(key_group)
-        key_layout.setSpacing(10)
+        key_layout.setSpacing(8)
 
-        # Direction keys (W, A, S, D)
         dir_group = QGroupBox("command[0], command[2]")
         dir_layout = QGridLayout(dir_group)
-        self.btn_up = NonClickableButton("W")
-        self.btn_up.setStyleSheet(button_style)
-        self.btn_up.setCheckable(True)
-        dir_layout.addWidget(self.btn_up, 0, 1)
-        self.btn_left = NonClickableButton("A")
-        self.btn_left.setStyleSheet(button_style)
-        self.btn_left.setCheckable(True)
-        dir_layout.addWidget(self.btn_left, 1, 0)
-        self.btn_right = NonClickableButton("D")
-        self.btn_right.setStyleSheet(button_style)
-        self.btn_right.setCheckable(True)
-        dir_layout.addWidget(self.btn_right, 1, 2)
-        self.btn_down = NonClickableButton("S")
-        self.btn_down.setStyleSheet(button_style)
-        self.btn_down.setCheckable(True)
-        dir_layout.addWidget(self.btn_down, 1, 1)
+        self.btn_up = NonClickableButton("W"); self.btn_up.setStyleSheet(button_style); self.btn_up.setCheckable(True); dir_layout.addWidget(self.btn_up, 0, 1)
+        self.btn_left = NonClickableButton("A"); self.btn_left.setStyleSheet(button_style); self.btn_left.setCheckable(True); dir_layout.addWidget(self.btn_left, 1, 0)
+        self.btn_right = NonClickableButton("D"); self.btn_right.setStyleSheet(button_style); self.btn_right.setCheckable(True); dir_layout.addWidget(self.btn_right, 1, 2)
+        self.btn_down = NonClickableButton("S"); self.btn_down.setStyleSheet(button_style); self.btn_down.setCheckable(True); dir_layout.addWidget(self.btn_down, 1, 1)
         key_layout.addWidget(dir_group)
 
-        # Other keys (I, O, P, J, K, L)
         other_group = QGroupBox("command[3], command[4], command[5]")
         other_layout = QGridLayout(other_group)
-        self.btn_i = NonClickableButton("I")
-        self.btn_i.setStyleSheet(button_style)
-        self.btn_i.setCheckable(True)
-        other_layout.addWidget(self.btn_i, 0, 0)
-        self.btn_o = NonClickableButton("O")
-        self.btn_o.setStyleSheet(button_style)
-        self.btn_o.setCheckable(True)
-        other_layout.addWidget(self.btn_o, 0, 1)
-        self.btn_p = NonClickableButton("P")
-        self.btn_p.setStyleSheet(button_style)
-        self.btn_p.setCheckable(True)
-        other_layout.addWidget(self.btn_p, 0, 2)
-        self.btn_j = NonClickableButton("J")
-        self.btn_j.setStyleSheet(button_style)
-        self.btn_j.setCheckable(True)
-        other_layout.addWidget(self.btn_j, 1, 0)
-        self.btn_k = NonClickableButton("K")
-        self.btn_k.setStyleSheet(button_style)
-        self.btn_k.setCheckable(True)
-        other_layout.addWidget(self.btn_k, 1, 1)
-        self.btn_l = NonClickableButton("L")
-        self.btn_l.setStyleSheet(button_style)
-        self.btn_l.setCheckable(True)
-        other_layout.addWidget(self.btn_l, 1, 2)
+        self.btn_i = NonClickableButton("I"); self.btn_i.setStyleSheet(button_style); self.btn_i.setCheckable(True); other_layout.addWidget(self.btn_i, 0, 0)
+        self.btn_o = NonClickableButton("O"); self.btn_o.setStyleSheet(button_style); self.btn_o.setCheckable(True); other_layout.addWidget(self.btn_o, 0, 1)
+        self.btn_p = NonClickableButton("P"); self.btn_p.setStyleSheet(button_style); self.btn_p.setCheckable(True); other_layout.addWidget(self.btn_p, 0, 2)
+        self.btn_j = NonClickableButton("J"); self.btn_j.setStyleSheet(button_style); self.btn_j.setCheckable(True); other_layout.addWidget(self.btn_j, 1, 0)
+        self.btn_k = NonClickableButton("K"); self.btn_k.setStyleSheet(button_style); self.btn_k.setCheckable(True); other_layout.addWidget(self.btn_k, 1, 1)
+        self.btn_l = NonClickableButton("L"); self.btn_l.setStyleSheet(button_style); self.btn_l.setCheckable(True); other_layout.addWidget(self.btn_l, 1, 2)
         key_layout.addWidget(other_group)
 
-        # ZX group (command[1])
         zx_group = QGroupBox("command[1]")
         zx_layout = QHBoxLayout(zx_group)
         zx_style = (
             "NonClickableButton { background-color: #3C3F41; border: none; color: #FFFFFF; "
-            "font-size: 11px; padding: 4px; border-radius: 10px; min-width: 30px; min-height: 30px; }"
+            "font-size: 11px; padding: 4px; border-radius: 10px; min-width: 22px; min-height: 22px; }"
             "NonClickableButton:checked { background-color: #4E94D4; }"
         )
-        self.btn_z = NonClickableButton("Z")
-        self.btn_z.setStyleSheet(zx_style)
-        self.btn_z.setCheckable(True)
-        zx_layout.addWidget(self.btn_z)
-        self.btn_x = NonClickableButton("X")
-        self.btn_x.setStyleSheet(zx_style)
-        self.btn_x.setCheckable(True)
-        zx_layout.addWidget(self.btn_x)
+        self.btn_z = NonClickableButton("Z"); self.btn_z.setStyleSheet(zx_style); self.btn_z.setCheckable(True); zx_layout.addWidget(self.btn_z)
+        self.btn_x = NonClickableButton("X"); self.btn_x.setStyleSheet(zx_style); self.btn_x.setCheckable(True); zx_layout.addWidget(self.btn_x)
         key_layout.addWidget(zx_group)
         parent_layout.addWidget(key_group, 1)
 
-        # Set key mapping
         self.key_mapping = {
             Qt.Key_W: (self.btn_up, 0, +1.0),
             Qt.Key_S: (self.btn_down, 0, -1.0),
@@ -854,26 +644,50 @@ class MainWindow(QMainWindow):
         if file_path:
             self.policy_file_le.setText(file_path)
 
+    def open_hardware_settings(self):
+        env_id = self.env_id_cb.currentText()
+        self._ensure_hardware_defaults()
+        dialog = HardwareSettingsDialog((self.hardware_settings).copy(), self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.hardware_settings = dialog.get_settings()
+            # Save back to per-env cache so it persists after env switches
+            self.hardware_settings_by_env[env_id] = (self.hardware_settings).copy()
+
+    def open_observation_settings(self):
+        # Open the dialog with the latest settings for the current env
+        env_id = self.env_id_cb.currentText()
+        self._ensure_observation_defaults()  # Sync cache
+        dialog = ObservationSettingsDialog((self.observation_settings).copy(), self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.observation_settings = dialog.get_settings()
+            
+            # Save current env settings back into the cache (so they restore next time)
+            self.obs_settings_by_env[env_id] = (self.observation_settings).copy()
+            # Mark that user manually changed settings (for reference)
+            self.observation_overridden_by_user = True
+
+    # ---------------- Run / Gather Config ----------------
+
     def start_test(self):
+        # Ensure latest settings for the current env
+        self._last_run_had_error = False
+        self._ensure_observation_defaults()
+        self._ensure_hardware_defaults()
+
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
-        self.status_label.setText("테스트 실행 중...")
+        self.status_label.setText("Test running...")
         self._update_status_label()
-
-        # Disable the Position Command checkbox
         self.position_command_cb.setEnabled(False)
-
         config = self._gather_config()
         if config is None:
             return
-
         policy_file_path = self.policy_file_le.text().strip()
         if not policy_file_path or not os.path.isfile(policy_file_path):
-            QMessageBox.critical(self, "Error", "유효한 ONNX 파일을 선택해주세요.")
+            QMessageBox.critical(self, "Error", "Please select a valid ONNX file.")
             self.position_command_cb.setEnabled(True)
             self._reset_ui_after_test()
             return
-
         self.tester = Tester()
         self.tester.load_config(config)
         self.tester.load_policy(policy_file_path)
@@ -881,7 +695,6 @@ class MainWindow(QMainWindow):
         for i, value in enumerate(self.current_command_values):
             self.tester.update_command(i, value)
         self.tester.stepFinished.connect(self.send_current_command)
-
         self.thread = QThread()
         self.worker = TesterWorker(self.tester)
         self.worker.moveToThread(self.thread)
@@ -895,38 +708,53 @@ class MainWindow(QMainWindow):
 
     def _gather_config(self):
         try:
+            self._ensure_hardware_defaults()
+            # hardware: convert numeric strings to float where applicable
+            hardware_numeric = {k: to_float(v, v) for k, v in self.hardware_settings.items()}
+
+            # observation: copy latest settings for the current env
+            env_id = self.env_id_cb.currentText()
+            self._ensure_observation_defaults()
+            observation = (self.observation_settings).copy()
+
+            # height_map patching with env YAML defaults
+            env_cfg = self.env_config.get(env_id, {}) or {}
+            yaml_hm = env_cfg.get("height_map", {}) if isinstance(env_cfg.get("height_map", {}), dict) else {}
+            yaml_hm_defaults = {
+                "size_x": to_float(yaml_hm.get("size_x", 1.0)),
+                "size_y": to_float(yaml_hm.get("size_y", 0.6)),
+                "res_x": to_int(yaml_hm.get("res_x", 15)),
+                "res_y": to_int(yaml_hm.get("res_y", 9)),
+            }
+
+            hm_val = observation.get("height_map", None)
+            if isinstance(hm_val, dict):
+                hm_val.setdefault("size_x", yaml_hm_defaults["size_x"])
+                hm_val.setdefault("size_y", yaml_hm_defaults["size_y"])
+                hm_val.setdefault("res_x", yaml_hm_defaults["res_x"])
+                hm_val.setdefault("res_y", yaml_hm_defaults["res_y"])
+                hm_val.setdefault("freq", 50)
+                hm_val.setdefault("scale", 1.0)
+                observation["height_map"] = hm_val
+            elif hm_val is None:
+                observation["height_map"] = None
+            else:
+                observation["height_map"] = None
+
             config = {
                 "env": {
-                    "id": self.env_id_cb.currentText(),
+                    "id": env_id,
                     "terrain": self.terrain_id_cb.currentText(),
-                    "action_in_state": self.action_in_state_cb.currentText() == "True",
                     "max_duration": float(self.max_duration_le.text().strip()),
-                    "observation_dim": int(self.observation_dim_le.text().strip()),
-                    "command_dim": int(self.command_dim_le.text().strip()),
-                    "action_dim": int(self.action_dim_le.text().strip()),
-                    "num_stack": int(self.num_stack_cb.currentText()),
-                    "external_sensors":  self.external_sensors_cb.currentText(),
-                    "external_sensors_Hz": self.external_sensors_Hz_cb.currentText(),
-                    "height_map": {"x_size": float(self.height_size_x_le.text().strip()),
-                                   "y_size": float(self.height_size_y_le.text().strip()),
-                                   "x_res": int(self.height_res_x_le.text().strip()),
-                                   "y_res": int(self.height_res_y_le.text().strip()),}
+                    "position_command": self.position_command_cb.isChecked()
                 },
+                "observation": observation,
                 "policy": {
                     "use_lstm": self.use_lstm_cb.currentText() == "True",
                     "h_in_dim": int(self.h_in_dim_le.text().strip()),
                     "c_in_dim": int(self.c_in_dim_le.text().strip()),
                     "onnx_file": os.path.basename(self.policy_file_le.text())
                 },
-
-                "obs_scales": {
-                    key: float(le.text())
-                    for key, le in self.obs_scales_le.items()
-                },
-                "command":{
-                    "position_command": self.position_command_cb.isChecked(),
-                },
-    
                 "random": {
                     "precision": self.precision_cb.currentText(),
                     "sensor_noise": self.sensor_noise_cb.currentText(),
@@ -939,38 +767,28 @@ class MainWindow(QMainWindow):
                     "mass_noise": self.mass_noise_slider.value() / 100.0,
                     "load": self.load_slider.value() / 10.0
                 },
-                "hardware": {
-                    "Kp_hip": float(self.Kp_hip.text().strip()) if self.Kp_hip.text().strip() != "N/A" else "N/A",
-                    "Kp_shoulder": float(self.Kp_shoulder.text().strip()) if self.Kp_shoulder.text().strip() != "N/A" else "N/A",
-                    "Kp_leg": float(self.Kp_leg.text().strip()) if self.Kp_leg.text().strip() != "N/A" else "N/A",
-                    "Kd_hip": float(self.Kd_hip.text().strip()) if self.Kd_hip.text().strip() != "N/A" else "N/A",
-                    "Kd_shoulder": float(self.Kd_shoulder.text().strip()) if self.Kd_shoulder.text().strip() != "N/A" else "N/A",
-                    "Kd_leg": float(self.Kd_leg.text().strip()) if self.Kd_leg.text().strip() != "N/A" else "N/A",
-                    "Kp_wheel": float(self.Kp_wheel.text().strip()) if self.Kp_wheel.text().strip() != "N/A" else "N/A",
-                    "Kd_wheel": float(self.Kd_wheel.text().strip()) if self.Kd_wheel.text().strip() != "N/A" else "N/A",
-                    "joint_max_torque": float(self.joint_max_torque_le.text().strip()),
-                    "wheel_max_torque": float(self.wheel_max_torque_le.text().strip())
-                }
+                "hardware": hardware_numeric
             }
-            config["obs_scales"]["scale_commands"] =  self.scale_commands_cb.currentText() == "True"
 
-            # Load random_table
+            # random_table (only if present)
             cur_file_path = os.path.abspath(__file__)
-            config_path = os.path.join(os.path.dirname(cur_file_path), "../config/random_table.yaml")
-            config_path = os.path.abspath(config_path)
-            with open(config_path) as f:
-                random_config = yaml.full_load(f)
-            config["random_table"] = random_config["random_table"]
+            random_path = os.path.join(os.path.dirname(cur_file_path), "../config/random_table.yaml")
+            random_path = os.path.abspath(random_path)
+            if os.path.isfile(random_path):
+                with open(random_path) as f:
+                    random_config = yaml.full_load(f)
+                if isinstance(random_config, dict) and "random_table" in random_config:
+                    config["random_table"] = random_config["random_table"]
             return config
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"파라미터 설정 오류: {e}")
+            QMessageBox.critical(self, "Error", f"Parameter setting error: {e}")
             self._reset_ui_after_test()
             return None
 
     def _reset_ui_after_test(self):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-        self.status_label.setText("대기 중")
+        self.status_label.setText("Waiting ...")
 
     def reset_command_buttons(self):
         for key in list(self.active_keys.keys()):
@@ -982,39 +800,39 @@ class MainWindow(QMainWindow):
 
     def on_test_finished(self):
         self.reset_command_buttons()
-        self.status_label.setText("테스트 완료")
+        the_text = "Test complete"
+        self.status_label.setText(the_text)
         self._reset_ui_after_test()
-
-        # Re-enable the Position Command checkbox
         self.position_command_cb.setEnabled(True)
 
-        reply = QMessageBox.question(
-            self,
-            "Report 확인",
-            "테스트가 종료되었습니다. 리포트를 열람하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            policy_file_path = self.policy_file_le.text().strip()
-            report_path = os.path.join(os.path.dirname(policy_file_path), "report.pdf")
-            if os.path.isfile(report_path):
-                QDesktopServices.openUrl(QUrl.fromLocalFile(report_path))
-            else:
-                QMessageBox.warning(self, "Warning", "리포트 파일(report.pdf)이 존재하지 않습니다.")
-
+        if not self._last_run_had_error:
+            reply = QMessageBox.question(
+                self,
+                "Check Report",
+                "Test has finished. Would you like to view the report?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                policy_file_path = self.policy_file_le.text().strip()
+                report_path = os.path.join(os.path.dirname(policy_file_path), "report.pdf")
+                if os.path.isfile(report_path):
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(report_path))
+                else:
+                    QMessageBox.warning(self, "Warning", "Report file (report.pdf) does not exist.")
+        
     def on_test_error(self, error_msg):
+        self._last_run_had_error = True
         QMessageBox.critical(self, "Test Error", error_msg)
-        self.status_label.setText("오류 발생")
+        self.status_label.setText("Error occurred")
         self._reset_ui_after_test()
 
     def stop_test(self):
         if self.tester:
             try:
                 self.tester.stop()
-                self.status_label.setText("테스트 중지 요청")
+                self.status_label.setText("Test stop requested")
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"테스트 중지 오류: {e}")
+                QMessageBox.critical(self, "Error", f"Test stop error: {e}")
         self.reset_command_buttons()
         self.stop_button.setEnabled(False)
         self.start_button.setEnabled(True)
-        

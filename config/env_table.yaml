@@ -1,44 +1,176 @@
-"flamingo_light_proto_v1":
-  "env":
-    "observation_dim": "12"
-    "action_dim": "4"
-    "command_dim": "3"
-    "command_3_initial": "0.261"
-  "obs_scales":
-    "lin_vel": 1.0
-    "ang_vel": 1.0
-    "dof_pos": 1.0
-    "dof_vel": 1.0
-    "scale_commands": True
-  "hardware":
-    "Kp_shoulder": "50"
-    "Kp_wheel": "0"
-    "Kd_shoulder": "1.5"
-    "Kd_wheel": "0.2"
-    "joint_max_torque": "12"
-    "wheel_max_torque": "12"
-    
+# obs fields: ["dof_pos", "dof_vel", "ang_vel", "lin_vel", "projected_gravity", "height_map", "last_action"]
 
-"flamingo_v1_5_1":
-  "env":
-    "observation_dim": "20"
-    "action_dim": "8"
-    "command_dim": "4"
-    "command_3_initial": "0.363"
+"flamingo_light_v1":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stack_size": 3
+  "non_stacked_obs_order": ["command"]
   "obs_scales":
-    "lin_vel": 2.0
-    "ang_vel": 0.25
     "dof_pos": 1.0
     "dof_vel": 0.15
-    "scale_commands": True
+    "ang_vel": 0.25
+    "lin_vel_x": 2.0
+    "lin_vel_y": 2.0
+    "lin_vel_z": 2.0  
+  "command":
+    "command_dim": 4
+    "command_3_initial": 0
+  "command_scales":
+    "0": 2.0
+    "1": 1.0
+    "2": 0.25
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
   "hardware":
-    "Kp_hip": "100"
-    "Kp_shoulder": "100"
-    "Kp_leg": "150"
-    "Kp_wheel": "0"
-    "Kd_hip": "1.5"
-    "Kd_shoulder": "1.5"
-    "Kd_leg": "2"
-    "Kd_wheel": "0.5"
-    "joint_max_torque": "45"
-    "wheel_max_torque": "45"
+    "Kp_shoulder": 15 
+    "Kd_shoulder": 0.45
+    "Kd_wheel": 0.3
+    "leg_max_torque": 36
+    "wheel_max_torque": 17
+
+
+"flamingo_p_v3":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stack_size": 3
+  "non_stacked_obs_order": ["command"]
+  "obs_scales":
+    "dof_pos": 1.0
+    "dof_vel": 0.15
+    "ang_vel": 0.25
+    "lin_vel_x": 2.0
+    "lin_vel_y": 1.0
+    "lin_vel_z": 0.25
+  "command":
+    "command_dim": 4
+    "command_3_initial": 0
+  "command_scales":
+    "0": 2.0
+    "1": 1.0
+    "2": 0.25
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
+  "height_map":
+    "size_x": 0.8
+    "size_y": 0.8
+    "res_x": 12
+    "res_y": 12
+  "hardware":
+    "Kp_hip": 70
+    "Kp_shoulder": 70
+    "Kp_leg": 70
+    "Kd_hip": 0.7
+    "Kd_shoulder": 0.7
+    "Kd_leg": 0.7
+    "Kd_wheel": 0.55
+    "hip_max_torque": 60
+    "shoulder_max_torque": 60
+    "leg_max_torque": 60
+    "wheel_max_torque": 36
+    "gear_ratio": -1.5
+    "gamma": 0.99
+
+"w4_p_v2":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
+  "stack_size": 3
+  "non_stacked_obs_order": ["command"]
+  "obs_scales":
+    "dof_pos": 1.0
+    "dof_vel": 0.15
+    "ang_vel": 0.25
+    "lin_vel_x": 2.0
+    "lin_vel_y": 1.0
+    "lin_vel_z": 0.25
+  "command":
+    "command_dim": 3
+    "command_3_initial": 0
+  "command_scales":
+    "0": 2.0
+    "1": 1.0
+    "2": 0.25
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
+  "height_map":
+    "size_x": 1.0
+    "size_y": 0.6
+    "res_x": 15
+    "res_y": 9
+  "hardware":
+    "Kp_hip": 100
+    "Kp_shoulder": 100
+    "Kp_leg": 150
+    "Kd_hip": 1.5
+    "Kd_shoulder": 1.5
+    "Kd_leg": 2.5
+    "Kd_wheel": 0.7
+    "hip_max_torque": 60
+    "shoulder_max_torque": 60
+    "leg_max_torque": 90
+    "wheel_max_torque": 36
+    "gear_ratio": -1.5
+    "gamma": 0.99
+
+"humanoid_p_v0":
+  "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action", "lin_vel"]
+  "stack_size": 3
+  "non_stacked_obs_order": ["command"]
+  "obs_scales":
+    "dof_pos": 1.0
+    "dof_vel": 0.15
+    "ang_vel": 0.25
+    "lin_vel_x": 2.0
+    "lin_vel_y": 2.0
+    "lin_vel_z": 2.0
+  "command":
+    "command_dim": 4
+    "command_3_initial": 0
+  "command_scales":
+    "0": 2.0
+    "1": 2.0
+    "2": 0.25
+    "3": 1.0
+    "4": 1.0
+    "5": 1.0
+  "height_map":
+    "size_x": 1.0
+    "size_y": 0.6
+    "res_x": 15
+    "res_y": 9
+  "hardware":
+    "Kp_hip_pitch": 200
+    "Kp_torso": 100
+    "Kp_hip_roll": 150
+    "Kp_shoulder_pitch": 30
+    "Kp_hip_yaw": 150
+    "Kp_shoulder_roll": 30
+    "Kp_knee": 200
+    "Kp_shoulder_yaw": 10
+    "Kp_ankle_pitch": 40
+    "Kp_elbow_pitch": 20
+    "Kp_ankle_roll": 40
+    "Kp_elbow_yaw": 10
+    "Kd_hip_pitch": 5
+    "Kd_torso": 2
+    "Kd_hip_roll": 5
+    "Kd_shoulder_pitch": 3
+    "Kd_hip_yaw": 5
+    "Kd_shoulder_roll": 3
+    "Kd_knee": 5
+    "Kd_shoulder_yaw": 1
+    "Kd_ankle_pitch": 4
+    "Kd_elbow_pitch": 2
+    "Kd_ankle_roll": 4
+    "Kd_elbow_yaw": 1
+    "hip_roll_joint_max_torque": 200
+    "hip_pitch_joint_max_torque": 200
+    "hip_yaw_joint_max_torque": 200
+    "knee_joint_max_torque": 300
+    "torso_joint_max_torque": 200
+    "ankle_roll_joint_max_torque": 40
+    "ankle_pitch_joint_max_torque": 40
+    "shoulder_roll_joint_max_torque": 40
+    "shoulder_pitch_joint_max_torque": 40
+    "shoulder_yaw_joint_max_torque": 18
+    "elbow_pitch_joint_max_torque": 18
+    "elbow_yaw_joint_max_torque": 18

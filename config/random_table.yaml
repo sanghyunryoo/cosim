@@ -23,17 +23,17 @@ random_table:
 
   sensor_noise:
     none:
-      q:
+      dof_pos:
         mean: 0.0
         std: 0.0000001
         lower: -0.00000001
         upper: 0.00000001
-      qd:
+      dof_vel:
         mean: 0.0
         std: 0.0000001
         lower: -0.00000001
         upper: 0.00000001
-      omega:
+      ang_vel:
         mean: 0.0
         std: 0.0000001
         lower: -0.00000001
@@ -43,7 +43,7 @@ random_table:
         std: 0.0000001
         lower: -0.00000001
         upper: 0.00000001
-      base_lin_vel:
+      lin_vel:
         mean: 0.0
         std: 0.0000001
         lower: -0.00000001
@@ -54,17 +54,17 @@ random_table:
         lower: -0.00000001
         upper: 0.00000001
     low:
-      q:
+      dof_pos:
         mean: 0.0
         std: 0.005
         lower: -0.01
         upper: 0.01
-      qd:
+      dof_vel:
         mean: 0.0
         std: 0.033
         lower: -0.066
         upper: 0.066
-      omega:
+      ang_vel:
         mean: 0.0
         std: 0.002
         lower: -0.004
@@ -74,7 +74,7 @@ random_table:
         std: 0.001
         lower: -0.005
         upper: 0.005
-      base_lin_vel:
+      lin_vel:
         mean: 0.0
         std: 0.01
         lower: -0.02
@@ -85,17 +85,17 @@ random_table:
         lower: -0.02
         upper: 0.02
     medium:
-      q:
+      dof_pos:
         mean: 0.0
         std: 0.004
         lower: -0.008
         upper: 0.008
-      qd:
+      dof_vel:
         mean: 0.0
         std: 0.09
         lower: -0.18
         upper: 0.18
-      omega:
+      ang_vel:
         mean: 0.0
         std: 0.005
         lower: -0.01
@@ -105,7 +105,7 @@ random_table:
         std: 0.0025
         lower: -0.01
         upper: 0.01
-      base_lin_vel:
+      lin_vel:
         mean: 0.0
         std: 0.015
         lower: -0.03
@@ -116,17 +116,17 @@ random_table:
         lower: -0.03
         upper: 0.03
     high:
-      q:
+      dof_pos:
         mean: 0.0
         std: 0.005
         lower: -0.010
         upper: 0.010
-      qd:
+      dof_vel:
         mean: 0.0
         std: 0.12
         lower: -0.24
         upper: 0.24
-      omega:
+      ang_vel:
         mean: 0.0
         std: 0.006
         lower: -0.012
@@ -136,7 +136,7 @@ random_table:
         std: 0.01
         lower: -0.02
         upper: 0.02
-      base_lin_vel:
+      lin_vel:
         mean: 0.0
         std: 0.03
         lower: -0.06
@@ -147,17 +147,17 @@ random_table:
         lower: -0.05
         upper: 0.05
     ultra:
-      q:
+      dof_pos:
         mean: 0.0
         std: 0.006
         lower: -0.012
         upper: 0.012
-      qd:
+      dof_vel:
         mean: 0.0
         std: 0.16
         lower: -0.32
         upper: 0.32
-      omega:
+      ang_vel:
         mean: 0.0
         std: 0.008
         lower: -0.016
@@ -167,7 +167,7 @@ random_table:
         std: 0.02
         lower: -0.04
         upper: 0.04
-      base_lin_vel:
+      lin_vel:
         mean: 0.0
         std: 0.06
         lower: -0.12
@@ -178,17 +178,17 @@ random_table:
         lower: -0.08
         upper: 0.08
     extreme:
-      q:
+      dof_pos:
         mean: 0.0
         std: 0.007
         lower: -0.014
         upper: 0.014
-      qd:
+      dof_vel:
         mean: 0.0
         std: 0.20
         lower: -0.40
         upper: 0.40
-      omega:
+      ang_vel:
         mean: 0.0
         std: 0.010
         lower: -0.020
@@ -198,7 +198,7 @@ random_table:
         std: 0.04
         lower: -0.08
         upper: 0.08
-      base_lin_vel:
+      lin_vel:
         mean: 0.0
         std: 0.12
         lower: -0.24
