@@ -87,13 +87,11 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
             "dof_pos": 23,
             "dof_vel": 23,
             "ang_vel": 3,
-            "lin_vel_x": 1,
-            "lin_vel_y": 1,
-            "lin_vel_z": 1,
+            "lin_vel": 3,
             "projected_gravity": 3,
             "last_action": self.action_dim,
             "height_map": int(self.res_x * self.res_y),
-            "command": self.config["observation"].get("command_dim", 0)
+            "command": self.config["observation"]["command_dim"]
         }
 
         # Set MuJoCo Wrapper
@@ -142,23 +140,21 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         else:
             height_map = None
 
-        dof_pos_noisy = truncated_gaussian_noisy_data(dof_pos, mean=self.sensor_noise_map["dof_pos"]["mean"], std=self.sensor_noise_map["dof_pos"]["std"], lower=self.sensor_noise_map["dof_pos"]["lower"], upper=self.sensor_noise_map["dof_pos"]["upper"])
-        dof_vel_noisy = truncated_gaussian_noisy_data(dof_vel, mean=self.sensor_noise_map["dof_vel"]["mean"], std=self.sensor_noise_map["dof_vel"]["std"], lower=self.sensor_noise_map["dof_vel"]["lower"], upper=self.sensor_noise_map["dof_vel"]["upper"])
-        ang_vel_noisy = truncated_gaussian_noisy_data(ang_vel, mean=self.sensor_noise_map["ang_vel"]["mean"], std=self.sensor_noise_map["ang_vel"]["std"], lower=self.sensor_noise_map["ang_vel"]["lower"], upper=self.sensor_noise_map["ang_vel"]["upper"])
-        lin_vel_noisy = truncated_gaussian_noisy_data(lin_vel, mean=self.sensor_noise_map["lin_vel"]["mean"], std=self.sensor_noise_map["lin_vel"]["std"], lower=self.sensor_noise_map["lin_vel"]["lower"], upper=self.sensor_noise_map["lin_vel"]["upper"])
-        projected_gravity_noisy = truncated_gaussian_noisy_data(projected_gravity, mean=self.sensor_noise_map["projected_gravity"]["mean"], std=self.sensor_noise_map["projected_gravity"]["std"], lower=self.sensor_noise_map["projected_gravity"]["lower"], upper=self.sensor_noise_map["projected_gravity"]["upper"])
-        height_map_noisy = truncated_gaussian_noisy_data(height_map, mean=self.sensor_noise_map["height_map"]["mean"], std=self.sensor_noise_map["height_map"]["std"], lower=self.sensor_noise_map["height_map"]["lower"], upper=self.sensor_noise_map["height_map"]["upper"])
-        
+        dof_pos_noisy = truncated_gaussian_noisy_data(dof_pos, **self.sensor_noise_map["dof_pos"])
+        dof_vel_noisy = truncated_gaussian_noisy_data(dof_vel, **self.sensor_noise_map["dof_vel"])
+        ang_vel_noisy = truncated_gaussian_noisy_data(ang_vel, **self.sensor_noise_map["ang_vel"])
+        lin_vel_noisy = truncated_gaussian_noisy_data(lin_vel, **self.sensor_noise_map["lin_vel"])
+        projected_gravity_noisy = truncated_gaussian_noisy_data(projected_gravity, **self.sensor_noise_map["projected_gravity"])
+        height_map_noisy = truncated_gaussian_noisy_data(height_map, **self.sensor_noise_map["height_map"])
+
         return {
             "dof_pos": dof_pos_noisy,
             "dof_vel": dof_vel_noisy,
             "ang_vel": ang_vel_noisy,
-            "lin_vel_x": lin_vel_noisy[0],
-            "lin_vel_y": lin_vel_noisy[1],
-            "lin_vel_z": lin_vel_noisy[2],
+            "lin_vel": lin_vel_noisy,
             "projected_gravity": projected_gravity_noisy,
             "height_map": height_map_noisy,
-            "last_action": self.action
+            "last_action": self.action,
         }
 
     def step(self, action):

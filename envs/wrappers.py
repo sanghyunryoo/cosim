@@ -392,16 +392,12 @@ class CommandWrapper(BaseEnv):
         assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         next_state, terminated, truncated, info = self.env.step(action)
         next_state = self._apply_command_inplace(next_state)
-   
-        if self.command_dim == 2:
-            info["user_command_0"] = self.user_command[0]
-            info["user_command_1"] = self.user_command[1]
-        elif self.command_dim > 2:
-            info["user_command_0"] = self.user_command[0]
-            info["user_command_1"] = self.user_command[1]
-            info["user_command_2"] = self.user_command[2]
-        else:
-            raise ValueError(f"Invalid 'command_dim': expected 2  or >= 3; but got {self.command_dim}.")
+
+        if self.command_dim < 0 or self.command_dim > 6:
+            raise ValueError(f"Invalid 'command_dim': expected 0> or <7; but got {self.command_dim}.")
+        
+        for i in range(self.command_dim):
+            info[f"user_command_{i}"] = self.user_command[i]
 
         if terminated or truncated:
             self.reset_flag = False

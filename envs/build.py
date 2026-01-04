@@ -1,17 +1,17 @@
-from envs.flamingo_light_p_v0.flamingo_light_p_v0 import FlamingoLightPV0
-from envs.flamingo_p_v0.flamingo_p_v0 import FlamingoPV0
-from envs.wheeldog_p_v0.wheeldog_p_v0 import WheelDogPV0
+from envs.flamingo_light_v1.flamingo_light_v1 import FlamingoLightV1
+from envs.flamingo_p_v3.flamingo_p_v3 import FlamingoPV3
+from envs.w4_p_v2.w4_p_v2 import W4PV2
 from envs.humanoid_p_v0.humanoid_p_v0 import HumanoidPV0
 from envs.wrappers import StateBuildWrapper, TimeLimitWrapper, CommandWrapper
 
 
 def build_env(config):
-    if config["env"]['id'] == "flamingo_p_v0":
-      env = FlamingoPV0(config)
-    elif config["env"]['id'] == "flamingo_light_p_v0":
-      env = FlamingoLightPV0(config)
-    elif config["env"]['id'] == "wheeldog_p_v0":
-      env = WheelDogPV0(config)
+    if config["env"]['id'] == "flamingo_light_v1":
+      env = FlamingoLightV1(config)
+    elif config["env"]['id'] == "flamingo_p_v3":
+      env = FlamingoPV3(config)
+    elif config["env"]['id'] == "w4_p_v2":
+      env = W4PV2(config)
     elif config["env"]['id'] == "humanoid_p_v0":
       env = HumanoidPV0(config)
     else:
