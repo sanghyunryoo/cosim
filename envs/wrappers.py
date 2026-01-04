@@ -1,6 +1,7 @@
 import warnings
 from abc import ABC, abstractmethod
-from typing import (Tuple, SupportsFloat)
+from typing import Tuple
+
 import numpy as np
 
 
@@ -31,7 +32,7 @@ class BaseEnv(ABC):
         pass
 
     @abstractmethod
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, SupportsFloat, bool, bool, dict]:
+    def step(self, action: np.ndarray):
         """
         Executes a step in the environment given an action.
 
@@ -84,6 +85,207 @@ class BaseEnv(ABC):
         pass
 
 
+class StateBuildWrapper(BaseEnv):
+    def __init__(self, env, config):
+        super().__init__()
+        self.env = env
+        self.config = config
+        self.id = env.id
+        self.action_dim = env.action_dim
+        self.sim_step = 0
+        self.reset_flag = False
+
+        # Require env.control_freq (Hz); fail fast if missing/invalid
+        if not hasattr(self.env, "control_freq"):
+            raise AttributeError(f"Env: {self.id} must define 'control_freq' (Hz).")
+        self.control_freq = float(self.env.control_freq)
+        if self.control_freq <= 0:
+            raise ValueError(f"Invalid env.control_freq: {self.control_freq}. Must be > 0.")
+        
+        self.command_dim = config["observation"]["command_dim"]
+        assert self.command_dim >= 0, "command_dim must be equal or greater than 0."
+
+        # Number of frames to stack (i=0 is the most recent frame)
+        self.stack_size = int(self.config["observation"]["stack_size"])
+        # Ordered observation keys that will be stacked
+        self.stacked_obs_order = list(self.config["observation"]["stacked_obs_order"])
+        # Ordered observation keys that will NOT be stacked (single-frame)
+        self.non_stacked_obs_order = list(self.config["observation"]["non_stacked_obs_order"])
+
+        # Cache dimensions   
+        self._stacked_obs_dim = sum(self.env.obs_to_dim[n] for n in self.stacked_obs_order)
+        self._non_stacked_obs_dim = sum(self.env.obs_to_dim[n] for n in self.non_stacked_obs_order)
+        self.state_dim = self.stack_size * self._stacked_obs_dim + self._non_stacked_obs_dim
+
+        # Cache command idx
+        self.cmd_slices = self._get_cmd_index_cache()
+  
+        # Rolling buffer for stacked observations (shape: [stack_size, stacked_obs_dim])
+        self.obs_buffer = np.zeros((self.stack_size, self._stacked_obs_dim), dtype=np.float32)
+
+        # Cache for frequency/scale-applied observation values
+        self._freq_cache = {}
+
+    def _get_cmd_index_cache(self):
+        """
+        Collect and cache all slices that correspond to 'command' segments
+        within the final flattened state vector (stacked + non-stacked).
+        """
+        cmd_slices = []
+ 
+        if self.command_dim <= 0:
+            return cmd_slices
+  
+        off = 0
+        single_frame_cmd_starts = []
+        for name in self.stacked_obs_order:
+            if name == "command":
+                single_frame_cmd_starts.append(off)
+            off += self.env.obs_to_dim[name]
+
+        for k in range(self.stack_size):
+            base = k * self._stacked_obs_dim
+            for s in single_frame_cmd_starts:
+                cmd_slices.append(slice(base + s, base + s + self.command_dim))
+
+        base_non = self.stack_size * self._stacked_obs_dim
+        off = 0
+        for name in self.non_stacked_obs_order:
+            if name == "command":
+                cmd_slices.append(slice(base_non + off, base_non + off + self.command_dim))
+            off += self.env.obs_to_dim[name]
+
+        return cmd_slices
+
+    def _concat_obs_with_freq(self, obs, names):
+        """
+        Concatenate observations following frequency (Hz) and scale rules defined in
+        config["observation"][<name>]. For each name:
+          - If sim_step == 0: always refresh with the latest 'obs' value.
+          - Else: refresh only when (control_freq / freq) step interval elapses; otherwise keep cached value.
+          - Always apply 'scale' by multiplication.
+
+        Args:
+            obs (dict): {name: np.ndarray}-like observation dictionary from the env.
+            names (list[str]): keys to fetch/concatenate in order.
+
+        Returns:
+            np.ndarray (float32): concatenated 1D vector with freq/scale applied.
+        """
+        parts = []
+        for n in names:
+            if n == "command":
+                # Insert placeholder zeros for command (will be overwritten by CommandWrapper)
+                val = np.zeros((self.command_dim,), dtype=np.float32)
+                parts.append(val)
+            else:
+                n_cfg = self.config["observation"][n]
+                update_freq = float(n_cfg["freq"])
+                scale = float(n_cfg["scale"])
+
+                if update_freq <= 0:
+                    raise ValueError(f"Invalid observation update frequency for '{n}': {update_freq}. Must be > 0.")
+
+                # Steps between updates; at least 1 to avoid division artifacts
+                update_interval = max(1, int(round(self.control_freq / update_freq)))
+                need_update = (self.sim_step == 0) or (self.sim_step % update_interval == 0)
+
+                if need_update or (n not in self._freq_cache):
+                    val = np.asarray(obs[n], dtype=np.float32) * scale
+                    self._freq_cache[n] = val
+
+                parts.append(self._freq_cache[n].ravel().astype(np.float32))
+        
+        if parts:
+            return np.concatenate(parts, axis=0)
+        else:
+            return np.zeros((0,), dtype=np.float32)
+
+    def _push_stack(self, latest_vec, reset=False):
+        """
+        Push a new stacked frame into the rolling buffer.
+
+        - If reset=True: fill the whole buffer with 'latest_vec'.
+        - If reset=False: shift older frames down by one and put 'latest_vec' at index 0.
+          Index 0 is the most recent; index (stack_size - 1) is the oldest.
+        """
+        if reset:
+            self.obs_buffer[:] = latest_vec
+        else:
+            if self.stack_size > 1:
+                self.obs_buffer[1:, :] = self.obs_buffer[:-1, :]
+            self.obs_buffer[0, :] = latest_vec
+
+    def _build_state(self, obs, reset: bool):
+        """
+        Build the final 1D state vector consisting of:
+        - Flattened stacked observations (from the rolling buffer).
+        - Concatenated non-stacked observations (also subject to freq/scale).
+
+        Args:
+            obs (dict): environment observation dict.
+            reset (bool): if True, re-initialize the stack with the current observation.
+
+        Returns:
+            np.ndarray (float32): state vector of length 'state_dim'.
+        """
+        # 1) Gather stacked observations (with frequency/scale rules)
+        obs_for_stack = self._concat_obs_with_freq(obs, self.stacked_obs_order)
+
+        # 2) Update the rolling buffer
+        self._push_stack(obs_for_stack, reset=reset)
+
+        # 3) Flatten stacked frames and append non-stacked observations (with freq/scale)
+        stacked_flat = self.obs_buffer.ravel()  # shape: (stack_size * stacked_obs_dim,)
+        non_stacked_vec = self._concat_obs_with_freq(obs, self.non_stacked_obs_order)
+
+        state = np.concatenate([stacked_flat, non_stacked_vec], axis=0)
+        return state.astype(np.float32)
+
+    def reset(self):
+        """
+        Reset the underlying environment and reinitialize internal counters and caches.
+        Fills the stack with the initial observation.
+        """
+        self.reset_flag = True
+        self.sim_step = 0
+        self._freq_cache.clear()
+        init_obs, info = self.env.reset()
+        init_state = self._build_state(init_obs, reset=True)
+
+        return init_state, info
+
+    def step(self, action: np.ndarray):
+        """
+        Step through the environment and build the next state.
+        """
+        assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
+        self.sim_step += 1
+        next_obs_dict, terminated, truncated, info = self.env.step(action)
+        next_state = self._build_state(next_obs_dict, reset=False)
+
+        if terminated or truncated:
+            self.reset_flag = False
+        return next_state, terminated, truncated, info
+
+    def event(self, event: str, value):
+        """Forward custom events to the wrapped environment."""
+        return self.env.event(event, value)
+
+    def get_data(self):
+        """Proxy for any data export the wrapped environment supports."""
+        return self.env.get_data()
+
+    def render(self):
+        """Render via the wrapped environment."""
+        self.env.render()
+
+    def close(self):
+        """Close the wrapped environment."""
+        self.env.close()
+
+
+
 class TimeLimitWrapper(BaseEnv):
     def __init__(self, env, config):
         super().__init__()
@@ -92,23 +294,24 @@ class TimeLimitWrapper(BaseEnv):
         self.id = env.id
         self.state_dim = env.state_dim
         self.action_dim = env.action_dim
-        self.max_sim_step = int(config["env"]["max_duration"] * 50)
+        self.command_dim = self.env.command_dim
+        self.cmd_slices = self.env.cmd_slices
         self.sim_step = 0
+        self.max_sim_step = int(config["env"]["max_duration"] * self.env.control_freq)
         self.reset_flag = False
 
     def reset(self):
         self.reset_flag = True
         self.sim_step = 0
         init_state, info = self.env.reset()
-
         return init_state, info
 
     def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
+        assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         self.sim_step += 1
         next_state, terminated, truncated, info = self.env.step(action)
         if terminated or truncated:
-            self.reset_flag = True
+            self.reset_flag = False
 
         if self.sim_step == self.max_sim_step:
             truncated = True
@@ -129,203 +332,33 @@ class TimeLimitWrapper(BaseEnv):
         self.env.close()
 
 
-class ActionInStateWrapper(BaseEnv):
-    def __init__(self, env, config):
-        super().__init__()
-        self.env = env
-        self.config = config
-        self.id = env.id
-        self.state_dim = env.state_dim + config["env"]["action_dim"]
-        self.action_dim = env.action_dim
-        self.reset_flag = False
-
-    def reset(self):
-        self.reset_flag = True
-        init_state, info = self.env.reset()
-        init_state = np.concatenate((init_state, np.zeros(self.action_dim)))
-
-        return init_state, info
-
-    def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
-        next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, action))
-
-        if terminated or truncated:
-            self.reset_flag = False
-
-        return next_state, terminated, truncated, info
-    
-    def event(self, event: str, value):
-        return self.env.event(event, value)
-
-    def get_data(self):
-        return self.env.get_data()
-
-    def render(self):
-        self.env.render()
-
-    def close(self):
-        self.env.close()
-
-
-class StateStackWrapper(BaseEnv):
-    def __init__(self, env, config):
-        super().__init__()
-        self.env = env
-        self.config = config
-        self.id = env.id
-        self.num_stack = config["env"]["num_stack"]
-        self.state_dim = env.state_dim * self.num_stack
-        self.action_dim = env.action_dim
-        self.state_stack = np.zeros((self.num_stack, env.state_dim))
-        self.reset_flag = False
-
-    def reset(self):
-        self.reset_flag = True
-        init_state, info = self.env.reset()
-        for i in range(self.config["env"]["num_stack"] ):
-            self.state_stack[i] = init_state
-        init_state = self.state_stack.ravel()
-
-        return init_state, info
-
-    def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
-        next_state, terminated, truncated, info = self.env.step(action)
-
-        for i in range(self.num_stack - 1):
-            self.state_stack[self.num_stack -1 - i] = self.state_stack[self.num_stack - 2 - i]
-        self.state_stack[0] = next_state
-        next_state = self.state_stack.ravel()
-
-        if terminated or truncated:
-            self.reset_flag = False
-
-        return next_state, terminated, truncated, info
-
-    def event(self, event: str, value):
-        return self.env.event(event, value)
-
-    def get_data(self):
-        return self.env.get_data()
-
-    def render(self):
-        self.env.render()
-
-    def close(self):
-        self.env.close()
-
-
-class ExternalObsWrapper(BaseEnv):
-    def __init__(self, env, config):
-        super().__init__()
-        self.env = env
-        self.config = config
-        self.id = env.id
-        self.external_sensors = self.config["env"]["external_sensors"] 
-        if self.external_sensors == "height_map":
-            height_map_dim = self.config["env"]["height_map"]["x_res"] * self.config["env"]["height_map"]["y_res"]
-            self.state_dim = env.state_dim + height_map_dim 
-        elif self.external_sensors == "base_lin_vel":
-            self.state_dim = env.state_dim + 3
-        elif self.external_sensors == "All":
-            height_map_dim = self.config["env"]["height_map"]["x_res"] * self.config["env"]["height_map"]["y_res"]         
-            self.state_dim = env.state_dim + (height_map_dim + 3)  # combine height_map and base_lin_vel
-        elif self.external_sensors == "None":
-            raise NotImplementedError(f"You must specify at least one external_sensors option when wrapping ExternalObsWrapper.")
-        else:
-            raise NotImplementedError(f"external_sensors option '{self.external_sensors}' is not supported.")
-        
-        self.action_dim = env.action_dim
-        self.reset_flag = False     
-
-    def reset(self):
-        self.reset_flag = True
-        init_state, info = self.env.reset()
-
-        if self.external_sensors == "height_map":
-            external_obs = info["height_map"]
-        elif self.external_sensors == "base_lin_vel":
-            external_obs = info["scaled_base_lin_vel"]
-        elif self.external_sensors == "All":
-            external_obs = np.concatenate((info["scaled_base_lin_vel"], info["height_map"]))  # scaled_base_lin_vel first
-        else:
-            raise NotImplementedError(f"external_sensors option '{self.external_sensors}' is not supported.")
-
-        init_state = np.concatenate((init_state, external_obs))
-        return init_state, info
-
-    def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
-        next_state, terminated, truncated, info = self.env.step(action)
-
-        if self.external_sensors == "height_map":
-            external_obs = info["height_map"]
-        elif self.external_sensors == "base_lin_vel":
-            external_obs = info["scaled_base_lin_vel"]
-        elif self.external_sensors == "All":
-            external_obs = np.concatenate((info["scaled_base_lin_vel"], info["height_map"]))  # scaled_base_lin_vel first
-        else:
-            raise NotImplementedError(f"external_sensors '{self.external_sensors}' are not supported.")
-
-        next_state = np.concatenate((next_state, external_obs))
-
-        if terminated or truncated:
-            self.reset_flag = False
-
-        return next_state, terminated, truncated, info
-
-    def event(self, event: str, value):
-        return self.env.event(event, value)
-    
-    def get_data(self):
-        return self.env.get_data()
-
-    def render(self):
-        self.env.render()
-
-    def close(self):
-        self.env.close()
-
-
 class CommandWrapper(BaseEnv):
     def __init__(self, env, config):
         super().__init__()
         self.env = env
         self.config = config
         self.id = env.id
-        self.state_dim = env.state_dim + config["env"]["command_dim"]
         self.action_dim = env.action_dim
-        self.command_dim = config["env"]["command_dim"]
-        self.user_command = np.zeros(config["env"]["command_dim"])
-        self.applied_command = np.zeros(config["env"]["command_dim"])
+        self.state_dim = env.state_dim 
+        self.cmd_slices = self.env.cmd_slices
+        self.command_dim = self.env.command_dim
+        self.user_command = np.zeros(config["observation"]["command_dim"])
+        self.applied_command = np.zeros(config["observation"]["command_dim"])
         self.reset_flag = False       
-        assert self.command_dim > 0, "command_dim must be greater than 0."
 
     def receive_user_command(self, user_command):
         self.user_command = user_command[:self.command_dim]
         self.applied_command[:] = user_command
 
-        if self.config["command"]["position_command"] is False:
-            if self.config["obs_scales"]["scale_commands"]:
-                if self.id in ["flamingo_light_proto_v1"]:
-                    self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
-                    self.applied_command[1] *= self.config["obs_scales"]["ang_vel"]
-                elif self.id in ["flamingo_v1_5_1", 'gaia_v1']:
-                    self.applied_command[0] *= self.config["obs_scales"]["lin_vel"]
-                    self.applied_command[1] *= self.config["obs_scales"]["lin_vel"]
-                    if len(self.user_command) > 2:
-                        self.applied_command[2] *= self.config["obs_scales"]["ang_vel"]
-                else:
-                    raise NotImplementedError(f"Feeding commands to robot: '{self.id}' is not supported.")          
+        if self.config["env"]["position_command"] is False:
+            for i in range(self.command_dim):
+                self.applied_command[i] *= self.config["observation"]["command_scales"][str(i)]        
         else:
-            assert self.command_dim == 2, "currently, position command only support 2 dim."
-            if self.config["obs_scales"]["scale_commands"]:
-                warnings.warn("For position commands, 'scale_commands' is ignored and always treated as False.")
+            assert self.command_dim == 2, f"Currently, position command only support 2 dimenstion, but got {self.command_dim}."
+            warnings.warn("For position commands, 'command_scales' is always treated as 1.0.")
 
             data = self.get_data()
-            robot_px, robot_py = data.qpos[0], data.qpos[1] #
+            robot_px, robot_py = data.qpos[0], data.qpos[1]
             target_x, target_y = self.user_command[0], self.user_command[1]
 
             delta_world_x = target_x - robot_px
@@ -340,34 +373,31 @@ class CommandWrapper(BaseEnv):
 
             self.applied_command[0] = robot_x
             self.applied_command[1] = robot_y
+            
+    def _apply_command_inplace(self, state: np.ndarray) -> np.ndarray:
+        """
+        Overwrite every 'command' slot (stacked + non-stacked) with self.applied_command.
+        """
+        for s in self.cmd_slices:
+            state[s] = self.applied_command
+        return state
 
     def reset(self):
         self.reset_flag = True
         init_state, info = self.env.reset()
-        init_state = np.concatenate((init_state, np.zeros(self.config["env"]["command_dim"])))
+        init_state = self._apply_command_inplace(init_state)
         return init_state, info
 
     def step(self, action: np.ndarray):
-        assert self.reset_flag is True, "Call `reset()` before calling `step()`."
+        assert self.reset_flag is True, "Call 'reset()' before calling 'step()'."
         next_state, terminated, truncated, info = self.env.step(action)
-        next_state = np.concatenate((next_state, self.applied_command))
+        next_state = self._apply_command_inplace(next_state)
 
-        if self.id in ["flamingo_light_proto_v1"]:
-            info["lin_vel_x_command"] = self.user_command[0]
-            info["ang_vel_z_command"] = self.user_command[1]
-        elif self.id in ["flamingo_v1_5_1", "gaia_v1"]:
-            info["lin_vel_x_command"] = self.user_command[0]
-            info["lin_vel_y_command"] = self.user_command[1]
-            if len(self.user_command) > 2:
-                info["ang_vel_z_command"] = self.user_command[2]
-            if len(self.user_command) > 3:
-                info["pos_z_command"] = self.user_command[3]
-            if len(self.user_command) > 4:
-                info["ang_roll_command"] = self.user_command[4]
-            if len(self.user_command) > 5:
-                info["ang_pitch_command"] = self.user_command[5]
-        else:
-            raise NameError("Choose the correct robot id.")
+        if self.command_dim < 0 or self.command_dim > 6:
+            raise ValueError(f"Invalid 'command_dim': expected 0> or <7; but got {self.command_dim}.")
+        
+        for i in range(self.command_dim):
+            info[f"user_command_{i}"] = self.user_command[i]
 
         if terminated or truncated:
             self.reset_flag = False

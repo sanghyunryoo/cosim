@@ -1,0 +1,576 @@
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QGroupBox, QGridLayout,
+    QScrollArea, QLineEdit, QWidget, QDialogButtonBox, QSizePolicy, QApplication, QStyle
+)
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QDoubleValidator, QIntValidator
+
+from ui.utils import to_float, to_int, normalize_numkey_float_values
+from ui.custom_widgets import NoWheelComboBox
+
+
+class ObservationSettingsDialog(QDialog):
+    def __init__(self, settings, parent):
+        """
+        Parameters
+        ----------
+        settings : dict
+            The current (saved) observation settings for the active environment.
+            These take absolute precedence over YAML/env defaults in this dialog.
+        parent : MainWindow
+            Used to read env_id and env_config for fallback defaults and scales.
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Observation Settings")
+
+        # Keep obs_types consistent with MainWindow
+        self.obs_types = [
+            "dof_pos", "dof_vel", "ang_vel",
+            "lin_vel_x", "lin_vel_y", "lin_vel_z",
+            "projected_gravity", "height_map", "last_action", "command"
+        ]
+
+        # Saved settings (highest priority source)
+        self.settings = settings if isinstance(settings, dict) else {}
+
+        # Parent ref (provides env_id, env_config)
+        self.parent_widget = parent
+
+        # Dynamic row stores
+        # Each element is a dict: {"layout": QHBoxLayout, "combo": QComboBox, "freq": QComboBox, "scale": QComboBox}
+        self.stacked_rows = []
+        self.non_rows = []
+
+        # Command scale widgets
+        self.cmd_scale_cbs = []
+        self.command_scales_grid = None
+
+        # Build UI and then load saved settings into it
+        self._setup_ui()
+        self._load_existing_settings()  # <- saved-first priority
+
+    # ---------- Small helpers ----------
+
+    def _scale_options(self):
+        """Common numeric options for scale selection combos."""
+        return ["0", "0.01", "0.05", "0.1", "0.15", "0.25", "0.5", "0.75", "1.0", "2.0", "2.5", "5"]
+
+    # ---------- UI construction ----------
+
+    def _setup_ui(self):
+        # ===== Outer layout =====
+        self._outer_layout = QVBoxLayout(self)
+
+        # ===== Scroll area (holds the main content) =====
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._outer_layout.addWidget(self._scroll)
+
+        # ===== Inner widget/layout (everything scrolls inside here) =====
+        self._inner_widget = QWidget()
+        self._inner_layout = QVBoxLayout(self._inner_widget)
+
+        # ---- small hint label
+        obs_label = QLabel("State Order: [Stacked]  →  [Non-Stacked]")
+        obs_label.setAlignment(Qt.AlignCenter)
+        obs_label.setStyleSheet(
+            "QLabel { font-size: 7pt; color: #222; letter-spacing: 1px; }"
+        )
+        obs_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self._inner_layout.addWidget(obs_label)
+
+        # ---- read current environment config (fallback defaults only)
+        env_id = self.parent_widget.env_id_cb.currentText()
+        env_cfg = self.parent_widget.env_config.get(env_id, {}) or {}
+        cmd_cfg_raw = env_cfg.get("command", {}) if isinstance(env_cfg.get("command", {}), dict) else {}
+        command_scales_from_cfg = normalize_numkey_float_values(env_cfg.get("command_scales", {}))
+        default_stack_size = to_int(env_cfg.get("stack_size", self.settings.get("stack_size", 3)), 3)
+
+        # Saved-first for command_dim
+        cmd_dim_val = to_int(self.settings.get("command_dim", cmd_cfg_raw.get("command_dim", 6)), 6)
+
+        # ---------------- Stacked Observation ----------------
+        stacked_group = QGroupBox("Stacked Observation")
+        stacked_v = QVBoxLayout()
+
+        # Stack size
+        stack_size_h = QHBoxLayout()
+        stack_size_h.addWidget(QLabel("Stack Size:"))
+        self.stack_size_cb = NoWheelComboBox()
+        self.stack_size_cb.addItems([str(i) for i in range(1, 16)])
+        self.stack_size_cb.setCurrentText(str(self.settings.get("stack_size", default_stack_size)))
+        stack_size_h.addWidget(self.stack_size_cb)
+        stacked_v.addLayout(stack_size_h)
+
+        # Rows container + add button
+        self.stacked_container = QVBoxLayout()
+        stacked_v.addLayout(self.stacked_container)
+        add_btn = QPushButton("Add")
+        add_btn.clicked.connect(lambda: self.add_stacked())
+        stacked_v.addWidget(add_btn)
+        stacked_group.setLayout(stacked_v)
+
+        # ---------------- Non-Stacked Observation ----------------
+        non_group = QGroupBox("Non-Stacked Observation")
+        non_v = QVBoxLayout()
+        self.non_container = QVBoxLayout()
+        non_v.addLayout(self.non_container)
+        add_non = QPushButton("Add")
+        add_non.clicked.connect(lambda: self.add_non())
+        non_v.addWidget(add_non)
+        non_group.setLayout(non_v)
+
+        # ---------------- Height Map detail (size/res) ----------------
+        height_group = QGroupBox("Height Map")
+        height_layout = QFormLayout()
+        # Compact layout for tight controls
+        height_layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        height_layout.setHorizontalSpacing(6)
+        height_layout.setVerticalSpacing(4)
+        height_layout.setContentsMargins(6, 6, 6, 6)
+
+        size_res_layout = QHBoxLayout()
+        size_res_layout.setContentsMargins(0, 0, 0, 0)
+        size_res_layout.setSpacing(4)
+
+        hm_yaml = env_cfg.get("height_map", {}) if isinstance(env_cfg.get("height_map", {}), dict) else {}
+        hm_settings = self.settings.get("height_map", {}) if isinstance(self.settings.get("height_map", {}), dict) else {}
+        hm_default = {
+            "size_x": to_float(hm_settings.get("size_x", hm_yaml.get("size_x", 1.0))),
+            "size_y": to_float(hm_settings.get("size_y", hm_yaml.get("size_y", 0.6))),
+            "res_x": to_int(hm_settings.get("res_x", hm_yaml.get("res_x", 15))),
+            "res_y": to_int(hm_settings.get("res_y", hm_yaml.get("res_y", 9))),
+        }
+
+        # Validators
+        double_validator = QDoubleValidator(0.000001, 1e6, 4)
+        double_validator.setNotation(QDoubleValidator.StandardNotation)
+        int_validator = QIntValidator(1, 10000)
+
+        # Size X
+        self.height_size_x_le = QLineEdit(str(hm_default["size_x"]))
+        self.height_size_x_le.setFixedWidth(60)
+        self.height_size_x_le.setPlaceholderText("x (m)")
+        self.height_size_x_le.setValidator(double_validator)
+        self.height_size_x_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        size_res_layout.addWidget(self.height_size_x_le)
+
+        # ×
+        size_res_layout.addWidget(QLabel("×"))
+
+        # Size Y
+        self.height_size_y_le = QLineEdit(str(hm_default["size_y"]))
+        self.height_size_y_le.setFixedWidth(60)
+        self.height_size_y_le.setPlaceholderText("y (m)")
+        self.height_size_y_le.setValidator(double_validator)
+        self.height_size_y_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        size_res_layout.addWidget(self.height_size_y_le)
+
+        # Resolution label
+        res_lbl = QLabel("     Resolution")
+        size_res_layout.addWidget(res_lbl)
+
+        # Res X
+        self.height_res_x_le = QLineEdit(str(hm_default["res_x"]))
+        self.height_res_x_le.setFixedWidth(60)
+        self.height_res_x_le.setPlaceholderText("res_x")
+        self.height_res_x_le.setValidator(int_validator)
+        self.height_res_x_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        size_res_layout.addWidget(self.height_res_x_le)
+
+        # ×
+        size_res_layout.addWidget(QLabel("×"))
+
+        # Res Y
+        self.height_res_y_le = QLineEdit(str(hm_default["res_y"]))
+        self.height_res_y_le.setFixedWidth(60)
+        self.height_res_y_le.setPlaceholderText("res_y")
+        self.height_res_y_le.setValidator(int_validator)
+        self.height_res_y_le.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        size_res_layout.addWidget(self.height_res_y_le)
+
+        height_layout.addRow("Size (m)", size_res_layout)
+        height_group.setLayout(height_layout)
+
+        # ---------------- Command ----------------
+        command_group = QGroupBox("Command")
+        command_layout = QFormLayout()
+        # Compact layout for tight controls
+        command_layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        command_layout.setHorizontalSpacing(6)
+        command_layout.setVerticalSpacing(4)
+        command_layout.setContentsMargins(6, 6, 6, 6)
+
+        # command_dim (1~6)
+        self.command_dim_cb = NoWheelComboBox()
+        self.command_dim_cb.addItems([str(i) for i in range(1, 7)])
+        self.command_dim_cb.setCurrentText(str(cmd_dim_val))
+        self.command_dim_cb.setSizeAdjustPolicy(self.command_dim_cb.AdjustToContents)
+        self.command_dim_cb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        command_layout.addRow("Command Dimension", self.command_dim_cb)
+
+        # Per-index scales grid
+        self.command_scales_group = QGroupBox("Command Scales")
+        self.command_scales_grid = QGridLayout(self.command_scales_group)
+        self.command_scales_grid.setContentsMargins(0, 0, 0, 0)
+        self.command_scales_grid.setHorizontalSpacing(4)
+        self.command_scales_grid.setVerticalSpacing(2)
+        self.command_scales_grid.setColumnStretch(1, 1)
+        self._rebuild_command_scales(command_scales_from_cfg, int(self.command_dim_cb.currentText()))
+        self.command_dim_cb.currentTextChanged.connect(
+            lambda _:
+                (self._rebuild_command_scales(command_scales_from_cfg, int(self.command_dim_cb.currentText())),
+                 QTimer.singleShot(0, self._recalculate_height))
+        )
+        command_layout.addRow(self.command_scales_group)
+        command_group.setLayout(command_layout)
+
+        # === Single 2x2 grid to tie column widths across both rows ===
+        # IMPORTANT:
+        # - Place Stacked and Non-Stacked in row 0, columns 0 and 1 (preserves their widths).
+        # - Place Height Map and Command in row 1, columns 0 and 1.
+        #   This makes bottom widths follow the same column widths as the top row.
+        quad_layout = QGridLayout()
+        quad_layout.setColumnStretch(0, 1)
+        quad_layout.setColumnStretch(1, 1)
+        quad_layout.setRowStretch(0, 0)
+        quad_layout.setRowStretch(1, 1)
+        quad_layout.setHorizontalSpacing(12)
+        quad_layout.setVerticalSpacing(12)
+
+        # Top row (unchanged width behavior, now anchored to grid columns)
+        quad_layout.addWidget(stacked_group, 0, 0)
+        quad_layout.addWidget(non_group,     0, 1)
+
+        # Bottom row (left = Height Map, right = Command) — same column widths as top
+        quad_layout.addWidget(height_group,  1, 0)
+        quad_layout.addWidget(command_group, 1, 1)
+
+        # Add the 2x2 grid into the scrollable inner layout
+        self._inner_layout.addLayout(quad_layout)
+
+        # Put the inner widget into the scroll area
+        self._scroll.setWidget(self._inner_widget)
+
+        # ---------------- Dialog buttons (fixed at bottom) ----------------
+        self._buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self._buttons.accepted.connect(self.accept)   # Caller will read get_settings() on Accepted
+        self._buttons.rejected.connect(self.reject)
+        self._outer_layout.addWidget(self._buttons)
+
+        # Set width and auto-resize height after UI build
+        QTimer.singleShot(0, self._recalculate_height)
+
+    # ---------- Sizing logic ----------
+
+    def _recalculate_height(self):
+        """Measure content height and resize dialog accordingly (with a safe clamp)."""
+        try:
+            content_h = self._inner_widget.sizeHint().height()
+            chrome_h = self._buttons.sizeHint().height()
+            try:
+                frame_h = self.style().pixelMetric(QStyle.PM_TitleBarHeight) \
+                          + 2 * self.style().pixelMetric(QStyle.PM_DefaultFrameWidth)
+            except Exception:
+                frame_h = 40
+
+            total_h = int(content_h + chrome_h + frame_h)
+            scr = (self.screen() if hasattr(self, "screen") else None) or QApplication.primaryScreen()
+            avail_h = scr.availableGeometry().height() if scr else 900
+            max_h = int(avail_h * 0.90)
+
+            target_h = max(400, min(max_h, total_h))
+            self.resize(930, target_h)
+        except Exception:
+            # Fallback to a safe default if measurement fails
+            scr = (self.screen() if hasattr(self, "screen") else None) or QApplication.primaryScreen()
+            avail_h = scr.availableGeometry().height() if scr else 900
+            self.resize(930, int(avail_h * 0.90))
+
+    # ---------- Command scale helpers ----------
+    def _rebuild_command_scales(self, command_scales_from_cfg: dict, cmd_dim: int):
+        """
+        Rebuild the (index, scale) grid based on current command_dim, preferring saved values.
+
+        Priority: self.settings["command_scales"]  >  env_cfg["command_scales"]  >  1.0
+        """
+        # Clear current grid content
+        while self.command_scales_grid.count():
+            item = self.command_scales_grid.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        self.cmd_scale_cbs.clear()
+
+        # Header
+        self.command_scales_grid.addWidget(QLabel("Index"), 0, 0)
+        self.command_scales_grid.addWidget(QLabel("Scale"), 0, 1)
+
+        # Saved-first prior
+        prior = normalize_numkey_float_values(self.settings.get("command_scales", {}))
+        options = self._scale_options()
+
+        for i in range(cmd_dim):
+            idx_str = str(i)
+            default_val = to_float(prior.get(idx_str, command_scales_from_cfg.get(idx_str, 1.0)), 1.0)
+
+            row = i + 1
+            self.command_scales_grid.addWidget(QLabel(f"{i}"), row, 0)
+
+            cb = NoWheelComboBox()
+            cb.addItems(options)
+            # Use exact match if available, otherwise fall back to "1.0"
+            cb.setCurrentText(str(default_val) if str(default_val) in options else "1.0")
+            # Tight comboboxes
+            cb.setSizeAdjustPolicy(cb.AdjustToContents)
+            cb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+            self.command_scales_grid.addWidget(cb, row, 1)
+            self.cmd_scale_cbs.append(cb)
+
+    # ---------- Dynamic row management ----------
+    def add_stacked(self, selected: str = "", freq: int = 50, scale: float = 1.0):
+        """Add one Stacked row: [obs_type][Freq][Scale][Delete]."""
+        h = QHBoxLayout()
+
+        # obs type
+        combo = NoWheelComboBox()
+        combo.addItems(self.obs_types)
+        if selected:
+            combo.setCurrentText(selected)
+        h.addWidget(combo)
+
+        # freq
+        freq_label = QLabel("Freq:")
+        h.addWidget(freq_label)
+        freq_cb = NoWheelComboBox()
+        freq_cb.addItems(["10", "25", "50"])
+        freq_cb.setCurrentText(str(freq))
+        h.addWidget(freq_cb)
+
+        # scale (prefer saved or default scale for that obs)
+        scale_label = QLabel("  Scale:")
+        h.addWidget(scale_label)
+        default_scale = self.get_default_scale(selected or combo.currentText())
+        scale_cb = NoWheelComboBox()
+        scale_cb.addItems(self._scale_options())
+        items = [scale_cb.itemText(j) for j in range(scale_cb.count())]
+        scale_cb.setCurrentText(str(scale) if str(scale) in items else str(default_scale))
+        h.addWidget(scale_cb)
+
+        # delete
+        remove = QPushButton("Delete")
+        remove.clicked.connect(lambda: self.remove_layout(h, self.stacked_container, self.stacked_rows))
+        h.addWidget(remove)
+
+        # Initial toggle + connect signal to update dynamically
+        self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        combo.currentTextChanged.connect(
+            lambda _:
+                self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        )
+
+        self.stacked_container.addLayout(h)
+        self.stacked_rows.append({"layout": h, "combo": combo, "freq": freq_cb, "scale": scale_cb})
+
+        QTimer.singleShot(0, self._recalculate_height)
+
+    def add_non(self, selected: str = "", freq: int = 50, scale: float = 1.0):
+        """Add one Non-Stacked row: [obs_type][Freq][Scale][Delete]."""
+        h = QHBoxLayout()
+
+        combo = NoWheelComboBox()
+        combo.addItems(self.obs_types)
+        if selected:
+            combo.setCurrentText(selected)
+        h.addWidget(combo)
+
+        # freq
+        freq_label = QLabel("Freq:")
+        h.addWidget(freq_label)
+        freq_cb = NoWheelComboBox()
+        freq_cb.addItems(["10", "25", "50"])
+        freq_cb.setCurrentText(str(freq))
+        h.addWidget(freq_cb)
+
+        # scale (prefer saved or default scale for that obs)
+        scale_label = QLabel("  Scale:")
+        h.addWidget(scale_label)
+        default_scale = self.get_default_scale(selected or combo.currentText())
+        scale_cb = NoWheelComboBox()
+        scale_cb.addItems(self._scale_options())
+        items = [scale_cb.itemText(j) for j in range(scale_cb.count())]
+        scale_cb.setCurrentText(str(scale) if str(scale) in items else str(default_scale))
+        h.addWidget(scale_cb)
+
+        remove = QPushButton("Delete")
+        remove.clicked.connect(lambda: self.remove_layout(h, self.non_container, self.non_rows))
+        h.addWidget(remove)
+
+        # Initial toggle + connect signal to update dynamically
+        self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        combo.currentTextChanged.connect(
+            lambda _:
+                self.update_row_widgets_for_obs(combo, freq_cb, scale_cb)
+        )
+
+        self.non_container.addLayout(h)
+        self.non_rows.append({"layout": h, "combo": combo, "freq": freq_cb, "scale": scale_cb})
+
+        QTimer.singleShot(0, self._recalculate_height)
+
+    def get_default_scale(self, obs_type: str) -> float:
+        """Read default scale for a given obs_type from the current env's obs_scales."""
+        env_id = self.parent_widget.env_id_cb.currentText()
+        env_cfg = self.parent_widget.env_config.get(env_id, {}) or {}
+        obs_scales = env_cfg.get("obs_scales", {}) or {}
+        return to_float(obs_scales.get(obs_type, 1.0), 1.0)
+
+    def remove_layout(self, layout, container, row_store):
+        """Remove a dynamic row and clean up its widgets."""
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        container.removeItem(layout)
+        layout.deleteLater()
+        for i, row in enumerate(row_store):
+            if row["layout"] is layout:
+                row_store.pop(i)
+                break
+        QTimer.singleShot(0, self._recalculate_height)
+
+    # ---------- Data extraction (height_map) ----------
+    def _extract_height_map_freq_scale_from_rows(self):
+        """
+        Find the first 'height_map' row across stacked/non-stacked and
+        return (True, freq, scale). If none found, return (False, None, None).
+        """
+        for rows in (self.stacked_rows, self.non_rows):
+            for row in rows:
+                if row["combo"].currentText() == "height_map":
+                    freq_val = to_int(row["freq"].currentText(), 50)
+                    scale_val = to_float(row["scale"].currentText(), 1.0)
+                    return True, freq_val, scale_val
+        return False, None, None
+
+    def get_settings(self) -> dict:
+        """
+        Aggregate all UI selections into a settings dictionary
+        that matches what MainWindow expects and caches per-env.
+        """
+        stacked_order = []
+        non_order = []
+        obs_dict = {}
+
+        # stacked rows
+        for row in self.stacked_rows:
+            obs_type = row["combo"].currentText()
+            stacked_order.append(obs_type)
+            if obs_type in ["command", "height_map"]:
+                pass
+            else:
+                obs_dict[obs_type] = {
+                    "freq": int(row["freq"].currentText()),
+                    "scale": float(row["scale"].currentText())
+                }
+
+        # non-stacked rows
+        for row in self.non_rows:
+            obs_type = row["combo"].currentText()
+            non_order.append(obs_type)
+            if obs_type in ["command", "height_map"]:
+                pass
+            else:
+                obs_dict[obs_type] = {
+                    "freq": int(row["freq"].currentText()),
+                    "scale": float(row["scale"].currentText())
+                }
+
+        # height map detail
+        sx = to_float(self.height_size_x_le.text(), 1.0)
+        sy = to_float(self.height_size_y_le.text(), 0.6)
+        rx = to_int(self.height_res_x_le.text(), 15)
+        ry = to_int(self.height_res_y_le.text(), 9)
+
+        hm_selected, hm_freq, hm_scale = self._extract_height_map_freq_scale_from_rows()
+        height_map = {
+            "size_x": sx, "size_y": sy, "res_x": rx, "res_y": ry, "freq": hm_freq, "scale": hm_scale
+        } if hm_selected else None
+
+        # command_scales
+        command_scales = {str(i): float(cb.currentText()) for i, cb in enumerate(self.cmd_scale_cbs)}
+
+        # stack_size
+        stack_size = int(self.stack_size_cb.currentText())
+
+        return {
+            "stacked_obs_order": stacked_order,
+            "non_stacked_obs_order": non_order,
+            "stack_size": stack_size,
+            "command_dim": int(self.command_dim_cb.currentText()),
+            "command_scales": command_scales,
+            "height_map": height_map,
+            **obs_dict
+        }
+
+    # ---------- Saved-first population ----------
+    def _load_existing_settings(self):
+        """
+        Apply saved settings into the UI (highest priority), falling back to env defaults
+        only if a specific field wasn't saved yet.
+        """
+        # stack size (saved-first)
+        env_id = self.parent_widget.env_id_cb.currentText()
+        default_stack_size = to_int(
+            self.parent_widget.env_config.get(env_id, {}).get("stack_size", 3), 3
+        )
+        self.stack_size_cb.setCurrentText(str(self.settings.get("stack_size", default_stack_size)))
+
+        # stacked rows
+        for obs in self.settings.get("stacked_obs_order", []):
+            obs_cfg = self.settings.get(obs)
+            freq = 50
+            scale = self.get_default_scale(obs)
+            if isinstance(obs_cfg, dict):
+                freq = to_int(obs_cfg.get("freq", freq), freq)
+                scale = to_float(obs_cfg.get("scale", scale), scale)
+            self.add_stacked(obs, freq, scale)
+
+        # non-stacked rows
+        for obs in self.settings.get("non_stacked_obs_order", []):
+            obs_cfg = self.settings.get(obs)
+            freq = 50
+            scale = self.get_default_scale(obs)
+            if isinstance(obs_cfg, dict):
+                freq = to_int(obs_cfg.get("freq", freq), freq)
+                scale = to_float(obs_cfg.get("scale", scale), scale)
+            self.add_non(obs, freq, scale)
+
+        # command_dim (the scales grid itself prefers saved command_scales)
+        default_cmd_dim = to_int(
+            self.parent_widget.env_config.get(env_id, {}).get("command", {}).get("command_dim", 6), 6
+        )
+        self.command_dim_cb.setCurrentText(str(self.settings.get("command_dim", default_cmd_dim)))
+
+    def update_row_widgets_for_obs(self, combo, freq_cb, scale_cb):
+        """
+        Update the enabled/disabled state of Freq/Scale widgets depending on the
+        selected observation type.
+        """
+        # Scale/Freq widgets: visible, but disabled if obs_type == 'command'
+        cbs = [freq_cb, scale_cb]
+        if combo.currentText() == "command":
+            for cb in cbs:
+                cb.setEnabled(False)
+                cb.addItem("")
+                cb.setCurrentText("")
+        else:
+            for cb in cbs:
+                cb.setEnabled(True)
+                idx = cb.findText("")
+                if idx != -1:
+                    cb.removeItem(idx)
+                    cb.setCurrentText("1.0")

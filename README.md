@@ -38,7 +38,8 @@ It is designed to study transitions between different simulation environments an
 
 - **🌐 Diverse Terrain Support**  
   Includes predefined environments:  
-  - `flat`, `rocky_easy`, `rocky_hard`  
+  - `flat`
+  - `rocky_easy`, `rocky_hard`  
   - `slope_easy`, `slope_hard`  
   - `stairs_up_easy`, `stairs_up_normal`, `stairs_up_hard`
 
