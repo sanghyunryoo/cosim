@@ -710,7 +710,13 @@ class MainWindow(QMainWindow):
         try:
             self._ensure_hardware_defaults()
             # hardware: convert numeric strings to float where applicable
-            hardware_numeric = {k: to_float(v, v) for k, v in self.hardware_settings.items()}
+            # The value type of 'action_scales' is a dict, so handle it separately
+            hardware_numeric = {}
+            for k, v in self.hardware_settings.items():
+                if k == "action_scales" and isinstance(v, dict):
+                    hardware_numeric[k] = {key: to_float(val, val) for key, val in v.items()}
+                else:
+                    hardware_numeric[k] = to_float(v, v)
 
             # observation: copy latest settings for the current env
             env_id = self.env_id_cb.currentText()
