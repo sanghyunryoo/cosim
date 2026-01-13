@@ -20,7 +20,12 @@ class FlamingoPV3(MujocoEnv, utils.EzPickle):
         self.config = config
         self.action_dim = 8
 
-        self.action_scaler = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 40.0, 40.0]
+        hip_action_scale = config["hardware"]["action_scales"]["hip"]
+        shoulder_action_scale = config["hardware"]["action_scales"]["shoulder"]
+        leg_action_scale = config["hardware"]["action_scales"]["leg"]
+        wheel_action_scale = config["hardware"]["action_scales"]["wheel"]
+        self.action_scaler = [hip_action_scale, hip_action_scale, shoulder_action_scale, shoulder_action_scale,
+                              leg_action_scale, leg_action_scale, wheel_action_scale, wheel_action_scale]
 
         self.render_mode = render_mode
         self.render_flag = render_flag
