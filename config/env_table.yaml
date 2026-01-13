@@ -1,5 +1,30 @@
-# obs fields: ["dof_pos", "dof_vel", "ang_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "projected_gravity", "height_map", "last_action"]
-
+# ============================================================================
+# Environment Configuration Table
+# ============================================================================
+#
+# This file defines COCELO-robot configurations
+#
+# Keys:
+# - stacked_obs_order: List of observations to be stacked (with history)
+# - stack_size: Number of historical frames to stack
+# - non_stacked_obs_order: List of observations without stacking (current frame only)
+# - obs_scales: Scaling factors for each observation type
+# - command: Command configuration
+# - command_scales: Scaling factors for command inputs
+# - height_map: Terrain height map configuration (if applicable)
+# - hardware: Hardware-specific parameters
+#   - action_scales: Scaling factors for joint/actuator actions
+#   - Kp_*: Proportional gains for PD controller
+#   - Kd_*: Derivative gains for PD controller
+#   - *_max_torque: Maximum torque limits for each joint/actuator
+#   - gear_ratio: Gear ratio (if applicable)
+#   - gamma: Gear transmission efficiency for leg joints (if applicable)
+#
+# AVAILABLE OBSERVATION FIELDS:
+# ["dof_pos", "dof_vel", "ang_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", 
+#  "projected_gravity", "height_map", "last_action"]
+#
+# ============================================================================
 "flamingo_light_v1":
   "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
   "stack_size": 3
