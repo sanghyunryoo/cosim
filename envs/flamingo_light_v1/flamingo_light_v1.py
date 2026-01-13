@@ -19,7 +19,9 @@ class FlamingoLightV1(MujocoEnv, utils.EzPickle):
         self.config = config
         self.action_dim = 4
         
-        self.action_scaler = [0.85, 0.85, 40.0, 40.0]
+        shoulder_action_scale = config["hardware"]["action_scales"]["shoulder"]
+        wheel_action_scale = config["hardware"]["action_scales"]["wheel"]
+        self.action_scaler = [shoulder_action_scale, shoulder_action_scale, wheel_action_scale, wheel_action_scale]
         self.render_mode = render_mode
         self.render_flag = render_flag
 

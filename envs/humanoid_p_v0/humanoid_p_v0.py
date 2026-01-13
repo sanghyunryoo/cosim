@@ -18,7 +18,33 @@ class HumanoidPV0(MujocoEnv, utils.EzPickle):
         self.id = "humanoid_p_v0"
         self.config = config
         self.action_dim = 23
-        self.action_scaler = np.ones(self.action_dim) * 1.0
+
+        hip_pitch_action_scale = config["hardware"]["action_scales"]["hip_pitch"]
+        torso_action_scale = config["hardware"]["action_scales"]["torso"]
+        hip_roll_action_scale = config["hardware"]["action_scales"]["hip_roll"]
+        shoulder_pitch_action_scale = config["hardware"]["action_scales"]["shoulder_pitch"]
+        hip_yaw_action_scale = config["hardware"]["action_scales"]["hip_yaw"]
+        shoulder_roll_action_scale = config["hardware"]["action_scales"]["shoulder_roll"]
+        knee_action_scale = config["hardware"]["action_scales"]["knee"]
+        shoulder_yaw_action_scale = config["hardware"]["action_scales"]["shoulder_yaw"]
+        ankle_pitch_action_scale = config["hardware"]["action_scales"]["ankle_pitch"]
+        elbow_pitch_action_scale = config["hardware"]["action_scales"]["elbow_pitch"]
+        ankle_roll_action_scale = config["hardware"]["action_scales"]["ankle_roll"]
+        elbow_yaw_action_scale = config["hardware"]["action_scales"]["elbow_yaw"]
+
+        self.action_scaler = [hip_pitch_action_scale, hip_pitch_action_scale,
+                              torso_action_scale,
+                              hip_roll_action_scale, hip_roll_action_scale,
+                              shoulder_pitch_action_scale, shoulder_pitch_action_scale,
+                              hip_yaw_action_scale, hip_yaw_action_scale,
+                              shoulder_roll_action_scale, shoulder_roll_action_scale ,
+                              knee_action_scale, knee_action_scale,
+                              shoulder_yaw_action_scale, shoulder_yaw_action_scale,
+                              ankle_pitch_action_scale, ankle_pitch_action_scale,
+                              elbow_pitch_action_scale, elbow_pitch_action_scale,
+                              ankle_roll_action_scale, ankle_roll_action_scale,
+                              elbow_yaw_action_scale, elbow_yaw_action_scale]
+
         self.render_mode = render_mode
         self.render_flag = render_flag
 

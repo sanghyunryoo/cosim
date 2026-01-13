@@ -12,7 +12,7 @@
 ## Overview
 <p align="center">
   <img src="docs/img/main_ui_img.png" alt="Main UI" width="65%">
-  <img src="docs/img/report_sample_img.png" alt="Report Sample" width="30%">
+  <img src="docs/img/report_sample_img.png" alt="Report Sample" width="50%">
 </p>
 
 `cosim` is a **Sim-to-Sim Framework** built on the MuJoCo physics engine.  
