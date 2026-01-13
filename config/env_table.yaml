@@ -1,4 +1,4 @@
-# obs fields: ["dof_pos", "dof_vel", "ang_vel", "lin_vel", "projected_gravity", "height_map", "last_action"]
+# obs fields: ["dof_pos", "dof_vel", "ang_vel", "lin_vel_x", "lin_vel_y", "lin_vel_z", "projected_gravity", "height_map", "last_action"]
 
 "flamingo_light_v1":
   "stacked_obs_order": ["dof_pos", "dof_vel", "ang_vel", "projected_gravity", "last_action"]
@@ -22,8 +22,11 @@
     "4": 1.0
     "5": 1.0
   "hardware":
-    "Kp_shoulder": 15 
-    "Kd_shoulder": 0.45
+    "action_scales":
+      "shoulder": 0.9
+      "wheel": 40
+    "Kp_shoulder": 15
+    "Kd_shoulder": 0.3
     "Kd_wheel": 0.3
     "leg_max_torque": 36
     "wheel_max_torque": 17
@@ -56,7 +59,12 @@
     "res_x": 12
     "res_y": 12
   "hardware":
-    "Kp_hip": 70
+    "action_scales":
+      "hip": 0.5
+      "shoulder": 0.5
+      "leg": 0.5
+      "wheel": 40
+    "Kp_hip": 70 
     "Kp_shoulder": 70
     "Kp_leg": 70
     "Kd_hip": 0.7
@@ -97,6 +105,11 @@
     "res_x": 15
     "res_y": 9
   "hardware":
+    "action_scales":
+      "hip": 1.0
+      "shoulder": 1.0
+      "leg": 1.0
+      "wheel": 40
     "Kp_hip": 100
     "Kp_shoulder": 100
     "Kp_leg": 150
@@ -138,6 +151,19 @@
     "res_x": 15
     "res_y": 9
   "hardware":
+    "action_scales":
+      "hip_pitch": 1.0
+      "torso": 1.0
+      "hip_roll": 1.0
+      "shoulder_pitch": 1.0
+      "hip_yaw": 1.0
+      "shoulder_roll": 1.0
+      "knee": 1.0
+      "shoulder_yaw": 1.0
+      "ankle_pitch": 1.0
+      "elbow_pitch": 1.0
+      "ankle_roll": 1.0
+      "elbow_yaw": 1.0
     "Kp_hip_pitch": 200
     "Kp_torso": 100
     "Kp_hip_roll": 150

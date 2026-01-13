@@ -18,7 +18,15 @@ class W4PV2(MujocoEnv, utils.EzPickle):
         self.id = "w4_p_v2"
         self.config = config
         self.action_dim = 16
-        self.action_scaler = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 40.0, 40.0, 40.0, 40.0]
+
+        hip_action_scale = config["hardware"]["action_scales"]["hip"]
+        shoulder_action_scale = config["hardware"]["action_scales"]["shoulder"]
+        leg_action_scale = config["hardware"]["action_scales"]["leg"]
+        wheel_action_scale = config["hardware"]["action_scales"]["wheel"]
+        self.action_scaler = [hip_action_scale, hip_action_scale, hip_action_scale, hip_action_scale,
+                              shoulder_action_scale, shoulder_action_scale, shoulder_action_scale, shoulder_action_scale,
+                              leg_action_scale, leg_action_scale, leg_action_scale, leg_action_scale,
+                              wheel_action_scale, wheel_action_scale, wheel_action_scale, wheel_action_scale]
         
         self.render_mode = render_mode
         self.render_flag = render_flag
